@@ -33,7 +33,9 @@ Goal: a machine with every tool installed, a public GitHub repository with a wor
 
 ### 0.1 Install the tools
 
-**Status:** ⏳ in progress
+**Status:** ✅ done (2026-11-16)
+
+**Which shell:** the commands in this step also work in Git Bash, because `winget`, `go`, `gcloud`, and `gh` are ordinary Windows programs. Later steps use PowerShell-only commands such as `Set-Location`, so this guide uses PowerShell throughout.
 
 **What each tool is for**
 
@@ -80,7 +82,16 @@ Goal: a machine with every tool installed, a public GitHub repository with a wor
 
    **Expected:** each prints a version number. If one says "not recognized", see [Troubleshooting](#troubleshooting).
 
-**Versions used when this guide was written:** to be filled in after installing.
+**Versions used when this guide was written (2026-11-16):**
+
+| Tool | Version |
+| --- | --- |
+| Go | go1.27.4 windows/amd64 |
+| Google Cloud SDK | 593.0.0 (core 2026.11.06, bq 2.1.42, gsutil 5.38) |
+| GitHub CLI | 2.104.0 (2026-11-12) |
+| Node.js | 24 (installed before this project) |
+
+Newer versions should work. If a later step behaves differently from what this guide says, compare your version with this table first.
 
 ### 0.2 Create the local repository
 
@@ -144,7 +155,7 @@ Every git commit records the author's email address, and anyone can read it in a
 
 ### 0.4 Create the GitHub repository and push
 
-**Status:** ⬜ not started
+**Status:** ✅ done (2026-11-16). Created with Option A, then pushed.
 
 There are two ways to do this. Option A uses the GitHub website and was the one used for this project. Option B does the same thing from the terminal with the GitHub CLI.
 
@@ -180,7 +191,24 @@ There are two ways to do this. Option A uses the GitHub website and was the one 
    - `-u` links the local `main` branch to `origin/main`, so later pushes need only `git push`.
    - The first push opens a browser window from Git Credential Manager (included with Git for Windows) to sign in to GitHub. It then remembers the sign-in, so no password or token is stored in the project.
 
-5. Refresh the repository page. **Expected:** the README shows, and the commit author is your GitHub account, not a personal email address.
+5. Check that the push worked, from the terminal:
+
+   ```powershell
+   git status
+   git log --oneline origin/main   # lists the commits GitHub now has
+   ```
+
+   **Expected:** `git status` says `Your branch is up to date with 'origin/main'`, which means the local `main` and the GitHub `main` point to the same commit. The log lists the same commits as `git log --oneline`.
+
+6. Refresh the repository page. **Expected:** the README shows, and the commit author is your GitHub account, not a personal email address.
+
+**Tip:** before the first push, check that no commit carries a personal address. This lists the author and committer email of every commit:
+
+```powershell
+git log --format="%h %ae %ce"
+```
+
+Every line should show only the noreply address.
 
 **About the license:** with no license, people can read public code but have no permission to reuse it. That is fine while building. A common choice for a portfolio project is the MIT License, which lets others reuse the code with credit. It can be added at any time from the repository page (**Add file → Create new file**, name it `LICENSE`, and pick a template).
 
@@ -234,6 +262,7 @@ These steps are written as they are done:
 | --- | --- | --- |
 | `go`, `gcloud`, or `gh` is "not recognized" right after installing | The terminal was open before the install, so it has the old PATH | Close all terminals and VS Code, then reopen. If it still fails, sign out of Windows and back in |
 | `winget` asks to accept source agreements | First use of winget on this machine | Type `Y` and press Enter |
+| `git push` says `fatal: 'origin' does not appear to be a git repository` | The remote was never added | Run `git remote add origin <address>` (step 0.4), then check with `git remote -v` |
 | A push is rejected with a message about a private email | Step 0.3 was skipped, or the commit was made before the noreply address was set | Set the address (step 0.3), then fix the last commit with `git commit --amend --reset-author --no-edit` and push again |
 
 ---
@@ -245,3 +274,5 @@ These steps are written as they are done:
 | 2026-11-16 | Guide started. Part 0 steps 0.1 to 0.4 written |
 | 2026-11-16 | Steps 0.2 and 0.3 done; first commit made with the noreply address |
 | 2026-11-16 | Step 0.4: added Option A (GitHub website), the path used for this project |
+| 2026-11-16 | Step 0.4 done: remote added and first push made; added the push checks and the email check tip |
+| 2026-11-16 | Step 0.1 done: Go, Google Cloud CLI, and GitHub CLI installed; versions recorded |
