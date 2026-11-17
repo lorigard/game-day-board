@@ -1,0 +1,9 @@
+# Store text files with Unix line endings (LF) in the repository.
+# Windows editors may show CRLF locally, but CI runs on Linux, and mixed
+# line endings cause noisy diffs and failing format checks.
+* text=auto eol=lf
+
+# Windows scripts need CRLF to run correctly.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf

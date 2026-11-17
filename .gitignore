@@ -1,0 +1,36 @@
+# Secrets and local configuration. Never commit these.
+# Real values live in environment variables or Google Secret Manager.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*service-account*.json
+*-credentials.json
+gha-creds-*.json
+
+# Go build output and test artifacts
+/bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Node and front-end build output
+node_modules/
+dist/
+.vite/
+coverage/
+
+# Firebase and Google Cloud local files
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Editors and operating systems
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
