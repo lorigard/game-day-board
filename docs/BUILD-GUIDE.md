@@ -84,7 +84,7 @@ Goal: a machine with every tool installed, a public GitHub repository with a wor
 
 ### 0.2 Create the local repository
 
-**Status:** ⏳ in progress (folder and files created; first commit waits for step 0.3)
+**Status:** ✅ done (2026-11-16)
 
 **Steps**
 
@@ -115,7 +115,7 @@ Goal: a machine with every tool installed, a public GitHub repository with a wor
 
 ### 0.3 Keep your email address private in commits
 
-**Status:** ⬜ not started
+**Status:** ✅ done (2026-11-16). First commit made with the noreply address.
 
 Every git commit records the author's email address, and anyone can read it in a public repository. GitHub provides a private "noreply" address to use instead.
 
@@ -243,4 +243,5 @@ These steps are written as they are done:
 | Date | Change |
 | --- | --- |
 | 2026-11-16 | Guide started. Part 0 steps 0.1 to 0.4 written |
+| 2026-11-16 | Steps 0.2 and 0.3 done; first commit made with the noreply address |
 | 2026-11-16 | Step 0.4: added Option A (GitHub website), the path used for this project |
