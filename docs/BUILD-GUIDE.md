@@ -10,6 +10,22 @@ This guide records every step taken to build Game Day Board, in order, with the 
 - Never paste a real key, password, or token into this file. Steps that involve secrets say where the secret is kept instead.
 - The requirements and design decisions are in the Software Requirements Specification (SRS). Requirement IDs such as FR-2 or NFR-8, and decision IDs such as D4, refer to it.
 
+**Reviewing and committing in VS Code**
+
+After step 0.4, every commit can be made from the VS Code **Source Control** panel (the branch icon on the left, or **Ctrl+Shift+G**) instead of the terminal. It runs the same git commands underneath.
+
+| Terminal command | What it does | In the Source Control panel |
+| --- | --- | --- |
+| `git diff` | Shows what changed in each file | Click a file under **Changes** for a side-by-side view: old on the left, new on the right |
+| `git add <file>` | Stages a file, meaning it goes into the next commit | Hover over the file and click **+** (Stage Changes). It moves to **Staged Changes** |
+| `git status` | Lists staged and unstaged files | The panel itself: **Staged Changes** go into the commit, **Changes** do not |
+| `git commit -m "..."` | Saves the staged files as one snapshot with a message | Type the message in the box at the top, then click **Commit** |
+| `git push` | Uploads new commits to GitHub | Click **Sync Changes**, which appears after a commit |
+
+Stage files one at a time with **+** rather than letting VS Code stage everything. Files that git ignores, such as `.env`, never appear in the panel.
+
+In the terminal, `git diff` opens long output in a pager, a viewer that shows one screen at a time and waits at a `:` prompt. Press **q** to leave it. Anything typed or pasted while the pager is open is read as key presses, not run as commands.
+
 **Status key:** ✅ done · ⏳ in progress · ⬜ not started
 
 ---
@@ -23,7 +39,8 @@ This guide records every step taken to build Game Day Board, in order, with the 
   - [0.4 Create the GitHub repository and push](#04-create-the-github-repository-and-push)
   - [0.5 Google Cloud: account security and free-tier check](#05-google-cloud-account-security-and-free-tier-check)
   - [0.6 Google Cloud: billing account, project, and budget alert](#06-google-cloud-billing-account-project-and-budget-alert)
-  - [0.7 and later: to come](#07-and-later-to-come)
+  - [0.7 CollegeFootballData.com API key](#07-collegefootballdatacom-api-key)
+  - [0.8 and later: to come](#08-and-later-to-come)
 - [Troubleshooting](#troubleshooting)
 - [Change log for this guide](#change-log-for-this-guide)
 
@@ -396,11 +413,62 @@ Free Tier (monthly, no end date; Google may change it with 30 days' notice; unus
 
 6. **Upgrade to a Paid billing account before the trial ends.** Reminder set for February 1, 2027. If this is missed, the billing account closes and every resource stops (step 0.5). In the console, go to the Welcome page and click **Activate**. *To come.*
 
-### 0.7 and later: to come
+### 0.7 CollegeFootballData.com API key
+
+**Status:** ✅ done (2026-11-17)
+
+**What an API key is:** a long random string that identifies you to the CFBD service. The ingest service sends it with every request, so CFBD knows whose monthly quota to count. Anyone who has the key can use up that quota, so it is treated as a secret.
+
+**Steps**
+
+1. On collegefootballdata.com, click **Request a free API key**. In the form, **Primary use** is a short survey question; this project chose **App builder**. Click **Submit**. CFBD emails the key.
+
+   **Do not paste the key into this guide, a chat, or any project file.** It is stored locally in step 2.
+
+2. **Store the key locally in a `.env` file.**
+
+   **What a `.env` file is:** a plain text file of `NAME=value` lines that programs load as environment variables. It does the same job as User Secrets (`dotnet user-secrets`) in .NET: the secret stays on your machine, outside the code. The Go services read the key with `os.Getenv("CFBD_API_KEY")`, like `Environment.GetEnvironmentVariable` in C#. In Google Cloud, Secret Manager supplies the same variable, so the code does not change.
+
+   The repository includes `.env.example`, which lists every setting by name with no values. It is committed so anyone rebuilding the project can see which settings they need. `.gitignore` blocks `.env` but allows `.env.example`.
+
+   In the VS Code **Explorer**, right-click empty space at the top level of the project, choose **New File**, and name it `.env`. Put in one line, with your key after the `=`: no spaces around `=` and no quotation marks.
+
+   ```
+   CFBD_API_KEY=<your-key>
+   ```
+
+   Save it. **Expected:** VS Code shows `.env` in gray, which means git ignores it.
+
+3. **Check that git ignores the file**, without printing the key:
+
+   ```powershell
+   git check-ignore -v .env
+   git status --short
+   ```
+
+   **What it does:** `git check-ignore -v` prints which `.gitignore` line matches a file; it prints nothing if the file is not ignored. `git status --short` lists new and changed files, one per line.
+
+   **Expected:** the first command prints `.gitignore:3:.env	.env`. The second does not list `.env`.
+
+   **If the key is ever committed or shared by mistake:** deleting it is not enough, because git history is public. Request a new key from CFBD and stop using the old one.
+
+**What the tiers and terms pages said on 2026-11-17** (https://collegefootballdata.com/api-tiers and https://collegefootballdata.com/terms)
+
+| Fact | Effect on this project |
+| --- | --- |
+| Free tier: **1,000 calls a month**, no card needed | The plan uses about 250 (NFR-7), under half |
+| **Live scoreboard is not in the free tier.** It starts at the $1 a month tier (Tier 1, 5,000 calls a month) | The app works out "in progress" as "started and not yet marked complete" (SRS 7.1). Whether to pay for live status is decided in Milestone 1 |
+| One key and one shared monthly limit cover both college football and college basketball | Only football is used, so no effect |
+| Scheduled polling and server-side caching are encouraged; excessive polling is prohibited | Matches design decision D2: ingest on a timer, serve from Firestore |
+| Keys must not be put in a public repository or in browser code | The key lives only on the server side (ingest service), never in the React app |
+| Going over the quota may suspend the key | Why NFR-7 counts calls and alerts at 60 percent |
+| No service-level agreement; features can change without notice | Another reason to serve from our own copy (D2, NFR-4) |
+| Attribution is appreciated but not required; suggested text "Data provided by CollegeFootballData.com" | Shown on every page anyway (FR-10) |
+| Running a public mirror, proxy, or substitute API of the data is prohibited | The read API exists only to serve this site's pages. It is described as the site's back end, never advertised as a public data API |
+
+### 0.8 and later: to come
 
 These steps are written as they are done:
-
-- CollegeFootballData.com API key, stored safely
 - A "hello" Go endpoint with one test
 - A "hello" React page with one test
 - The first GitHub Actions pipeline that runs both tests on every push
@@ -437,3 +505,6 @@ These steps are written as they are done:
 | 2026-11-17 | Step 0.6: billing linked in the console; default gcloud project set; two troubleshooting rows (picker delay, 429 from the shared project) |
 | 2026-11-17 | Step 0.6: $5 budget alert created (alerts only, promotional credits excluded) |
 | 2026-11-17 | Step 0.5 done. Added "What it does" notes for every command and option in steps 0.1 to 0.6 |
+| 2026-11-17 | Step 0.7 started: key requested; CFBD tiers and terms recorded |
+| 2026-11-17 | Step 0.7 done: key stored in a gitignored `.env`; `.env.example` added |
+| 2026-11-17 | Added "Reviewing and committing in VS Code" to the start of the guide |
