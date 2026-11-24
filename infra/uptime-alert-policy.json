@@ -1,0 +1,28 @@
+{
+  "displayName": "Game Day Board site is down",
+  "documentation": {
+    "content": "The uptime check on /api/health failed from more than one location. Check Cloud Run logs for gdb-web, and the latest GitHub Actions run. Runbook: docs/ARCHITECTURE.md.",
+    "mimeType": "text/markdown"
+  },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "Uptime check gdb-web-health failing",
+      "conditionThreshold": {
+        "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.label.check_id=\"gdb-web-health-K6ZhAm6RrfI\" AND resource.type=\"uptime_url\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "1200s",
+            "perSeriesAligner": "ALIGN_NEXT_OLDER",
+            "crossSeriesReducer": "REDUCE_COUNT_FALSE",
+            "groupByFields": ["resource.label.*"]
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 1,
+        "duration": "60s",
+        "trigger": { "count": 1 }
+      }
+    }
+  ]
+}

@@ -40,7 +40,8 @@ In the terminal, `git diff` opens long output in a pager, a viewer that shows on
   - [0.5 Google Cloud: account security and free-tier check](#05-google-cloud-account-security-and-free-tier-check)
   - [0.6 Google Cloud: billing account, project, and budget alert](#06-google-cloud-billing-account-project-and-budget-alert)
   - [0.7 CollegeFootballData.com API key](#07-collegefootballdatacom-api-key)
-  - [0.8 and later: to come](#08-and-later-to-come)
+  - [0.8 Remaining setup items](#08-remaining-setup-items)
+- [Part 1: The first version (built 2026-11-23)](#part-1-the-first-version-built-2026-11-23)
 - [Troubleshooting](#troubleshooting)
 - [Change log for this guide](#change-log-for-this-guide)
 
@@ -466,14 +467,238 @@ Free Tier (monthly, no end date; Google may change it with 30 days' notice; unus
 | Attribution is appreciated but not required; suggested text "Data provided by CollegeFootballData.com" | Shown on every page anyway (FR-10) |
 | Running a public mirror, proxy, or substitute API of the data is prohibited | The read API exists only to serve this site's pages. It is described as the site's back end, never advertised as a public data API |
 
-### 0.8 and later: to come
+### 0.8 Remaining setup items
 
-These steps are written as they are done:
-- A "hello" Go endpoint with one test
-- A "hello" React page with one test
-- The first GitHub Actions pipeline that runs both tests on every push
-- Branch protection on `main`
-- `CLAUDE.md`, `AI-WORKFLOW.md`, and the clean-code review skill
+- ⬜ Branch protection on `main` (now that the pipeline exists): see step 1.7.
+- ⬜ VS Code extensions: Go (`golang.go`) and ESLint (`dbaeumer.vscode-eslint`).
+- ⬜ My own clean-code review skill (see `docs/AI-WORKFLOW.md`).
+
+The "hello" endpoint, "hello" page, and first pipeline from the original Milestone 0 list were overtaken by Part 1, which built the whole first version.
+
+---
+
+## Part 1: The first version (built 2026-11-23)
+
+**Status:** ✅ running at https://gdb-web-442687404328.us-central1.run.app
+
+**How this part was done.** To get a working first version online quickly, Claude Code drafted the code, tests, pipeline, and cloud resources in one session, from the SRS, and ran the cloud commands with my signed-in `gcloud`. This part records exactly what was run, in order, so it can be repeated and understood. The plan for the following weeks is to work through each step here myself, one at a time (step 1.10).
+
+Commands in this part are written for **Git Bash** (the `\` at the end of a line continues the command on the next line). In PowerShell, use a backtick `` ` `` instead of `\` at the end of each line.
+
+### 1.1 What was built, and where it lives
+
+| Path | What it is |
+| --- | --- |
+| `backend/internal/football` | Our own data types (Game, Team, Week) and small rules: game status, win-loss record, current week, which season a date belongs to |
+| `backend/internal/cfbd` | The CollegeFootballData client: 10-second timeout per attempt, up to 3 retries with backoff and jitter on timeouts, 429, and 5xx, reads the `X-CallLimit-Remaining` quota header |
+| `backend/internal/retry` | The backoff calculation, on its own so it can be tested exactly |
+| `backend/internal/store` | The `Store` interface, the Firestore version, and an in-memory version for tests |
+| `backend/internal/ingest` | Decides what to fetch (full refresh weekly, otherwise the current week only), keeps Big 12 and SEC games, saves them, records the run's status |
+| `backend/internal/api` | The read endpoints under `/api/`, plus `/api/health` and `/api/ready` |
+| `backend/internal/web` | Serves the built React files, sending `index.html` for page addresses such as `/teams/2305` |
+| `backend/internal/httpx` | JSON logs in Cloud Logging's format, request logging with trace IDs, panic recovery, graceful shutdown |
+| `backend/cmd/api`, `backend/cmd/ingest` | The two programs' `main` functions: read settings from environment variables and start the server |
+| `frontend/src` | React app: `api/` (fetch and types), `hooks/useApi.ts` (loading, error, success), `components/`, `pages/`, `lib/format.ts` |
+| `Dockerfile` | Builds both container images (targets `web` and `ingest`) |
+| `.github/workflows/ci-cd.yml` | The pipeline |
+
+**Check it locally** (from the repository root, in PowerShell):
+
+```powershell
+cd backend
+go test ./...          # every Go unit test; "ok" for each package
+cd ..\frontend
+npm ci                 # installs exactly the versions in package-lock.json
+npm test               # 21 tests
+npm run dev            # opens the site locally; its /api calls go to the live back end
+```
+
+### 1.2 Turn on the Google Cloud services the app uses
+
+```bash
+gcloud services enable run.googleapis.com firestore.googleapis.com \
+  cloudscheduler.googleapis.com secretmanager.googleapis.com \
+  artifactregistry.googleapis.com iam.googleapis.com iamcredentials.googleapis.com \
+  sts.googleapis.com monitoring.googleapis.com logging.googleapis.com \
+  cloudresourcemanager.googleapis.com serviceusage.googleapis.com \
+  --project=game-day-board
+```
+
+**What it does:** every Google Cloud product is an API that starts switched off in a new project. This switches on the ones the app uses: Cloud Run, Firestore, Cloud Scheduler, Secret Manager, Artifact Registry (container images), IAM and the two token services Workload Identity Federation needs (`iamcredentials`, `sts`), and monitoring and logging. Enabling an API costs nothing; only usage is billed. (`firebase` and `firebasehosting` were also enabled while trying Firebase Hosting; see the SRS note on D6.)
+
+### 1.3 Create the database and the image registry
+
+```bash
+gcloud firestore databases create --location=us-central1 --type=firestore-native --project=game-day-board
+
+gcloud artifacts repositories create gdb --repository-format=docker \
+  --location=us-central1 --description="Game Day Board container images" --project=game-day-board
+
+gcloud artifacts repositories set-cleanup-policies gdb --location=us-central1 \
+  --policy=infra/artifact-cleanup-policy.json --no-dry-run --project=game-day-board
+```
+
+- The first command creates the project's default Firestore database in Native mode (the document database the app uses), in `us-central1`, the same region as Cloud Run. The free tier applies to this default database.
+- The second creates a private Docker registry named `gdb`, where the pipeline stores each built image.
+- The third attaches the cleanup policy in `infra/artifact-cleanup-policy.json`: keep the 5 newest images, delete the rest after 7 days. **Why:** the free tier holds only 0.5 GB of images, and every push to `main` adds two (step 0.5).
+
+### 1.4 Store the CFBD key in Secret Manager, without printing it
+
+```bash
+grep '^CFBD_API_KEY=' .env | cut -d= -f2- | tr -d '\r\n' \
+  | gcloud secrets create cfbd-api-key --replication-policy=automatic --data-file=- --project=game-day-board
+```
+
+**What it does:** reads the key's line from `.env`, keeps only the part after `=`, strips the line ending, and pipes it straight into a new secret named `cfbd-api-key`. `--data-file=-` means "read the value from the pipe", so the key never appears on screen, in the shell history, or in a file. In Cloud Run, the ingest service receives it as the `CFBD_API_KEY` environment variable, the same name `.env` uses locally.
+
+### 1.5 Create one identity per job, with only the permissions that job needs
+
+A **service account** is an identity for a program rather than a person. Each part of the app gets its own, so a mistake or a break-in in one part cannot reach the rest (NFR-10).
+
+```bash
+for sa in gdb-api gdb-ingest gdb-scheduler gdb-deployer; do
+  gcloud iam service-accounts create $sa --display-name="Game Day Board $sa" --project=game-day-board
+done
+```
+
+| Account | Permission granted | Command |
+| --- | --- | --- |
+| `gdb-api` | Read Firestore | `gcloud projects add-iam-policy-binding game-day-board --member=serviceAccount:gdb-api@game-day-board.iam.gserviceaccount.com --role=roles/datastore.viewer --condition=None` |
+| `gdb-ingest` | Read and write Firestore | same command with `gdb-ingest` and `--role=roles/datastore.user` |
+| `gdb-ingest` | Read the one secret (not every secret) | `gcloud secrets add-iam-policy-binding cfbd-api-key --member=serviceAccount:gdb-ingest@game-day-board.iam.gserviceaccount.com --role=roles/secretmanager.secretAccessor` |
+| `gdb-deployer` | Deploy and manage Cloud Run services | project binding with `--role=roles/run.admin` |
+| `gdb-deployer` | Use the project's APIs on its own behalf | project binding with `--role=roles/serviceusage.serviceUsageConsumer` |
+| `gdb-deployer` | Push images to the `gdb` registry only | `gcloud artifacts repositories add-iam-policy-binding gdb --location=us-central1 --member=serviceAccount:gdb-deployer@game-day-board.iam.gserviceaccount.com --role=roles/artifactregistry.writer` |
+| `gdb-deployer` | Start services that run as `gdb-api` and `gdb-ingest` | `gcloud iam service-accounts add-iam-policy-binding gdb-api@game-day-board.iam.gserviceaccount.com --member=serviceAccount:gdb-deployer@game-day-board.iam.gserviceaccount.com --role=roles/iam.serviceAccountUser` (and the same for `gdb-ingest`) |
+| `gdb-scheduler` | Call the private ingest service | step 1.8, after the service exists |
+
+`--condition=None` means the permission always applies, with no extra rule such as a time limit.
+
+### 1.6 Let GitHub Actions deploy without a stored key (Workload Identity Federation)
+
+**The idea:** when a GitHub Actions job runs, GitHub can issue it a short-lived signed token that says "I am a run of the repository lorigard/game-day-board". Google Cloud is told to trust GitHub's signature, but only for this repository, and to exchange the token for credentials of `gdb-deployer` that expire within an hour. Nothing secret is stored in GitHub. This is design decision D10.
+
+```bash
+# 1. A "pool" groups outside identities that Google Cloud will trust.
+gcloud iam workload-identity-pools create github --location=global \
+  --display-name="GitHub Actions" --project=game-day-board
+
+# 2. A "provider" says who signs the tokens (GitHub) and which tokens to accept.
+gcloud iam workload-identity-pools providers create-oidc github-actions \
+  --location=global --workload-identity-pool=github \
+  --display-name="GitHub Actions OIDC" \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
+  --attribute-condition="assertion.repository == 'lorigard/game-day-board'" \
+  --project=game-day-board
+
+# 3. Allow runs of this repository, and nothing else, to act as gdb-deployer.
+gcloud iam service-accounts add-iam-policy-binding gdb-deployer@game-day-board.iam.gserviceaccount.com \
+  --role=roles/iam.workloadIdentityUser \
+  --member="principalSet://iam.googleapis.com/projects/442687404328/locations/global/workloadIdentityPools/github/attribute.repository/lorigard/game-day-board" \
+  --project=game-day-board
+```
+
+- `--attribute-condition` is the safety catch: a token from any other repository is refused, even though every repository's tokens are signed by GitHub.
+- `442687404328` is the project **number** (not the ID). Find it with `gcloud projects describe game-day-board --format="value(projectNumber)"`.
+- The workflow uses the provider's full name: `projects/442687404328/locations/global/workloadIdentityPools/github/providers/github-actions`.
+
+### 1.7 The pipeline
+
+`.github/workflows/ci-cd.yml` has four jobs. The first three run on every push and pull request, side by side:
+
+| Job | What it checks |
+| --- | --- |
+| Go checks and tests | Formatting (`gofmt`), `go vet`, unit tests with the race detector, then integration tests against the Firestore emulator |
+| React checks and tests | ESLint, TypeScript type check, Vitest tests, production build |
+| Scan for committed secrets | Gitleaks reads the whole git history for anything shaped like a key or password |
+
+The fourth, **Build, deploy, and verify**, runs only on a push to `main`, and only if the other three passed:
+
+1. Signs in to Google Cloud through Workload Identity Federation (step 1.6).
+2. Builds both images and pushes them to Artifact Registry, tagged with the commit ID.
+3. Deploys `gdb-ingest` as a private service with the secret attached.
+4. Deploys the new `gdb-web` version with **no traffic** and a private "candidate" address, checks `/api/health` there, and only then moves visitors to it. If the check fails, visitors stay on the previous version.
+5. Smoke-tests the live address.
+
+**To do: branch protection.** On GitHub: **Settings → Branches → Add branch ruleset** (or **Add rule**) for `main`, require the three check jobs to pass before merging, and block force pushes. After that, changes go through pull requests.
+
+### 1.8 Run ingest on a schedule (Cloud Scheduler)
+
+The pipeline deploys the services; the schedule is set up once, by hand, after the first deploy, because it needs the ingest service's address.
+
+```bash
+# The ingest service's address (Cloud Run gives each service one).
+INGEST_URL=$(gcloud run services describe gdb-ingest --region us-central1 --project game-day-board --format='value(status.url)')
+
+# Allow the scheduler's identity, and only it, to call the private ingest service.
+gcloud run services add-iam-policy-binding gdb-ingest --region us-central1 --project game-day-board \
+  --member=serviceAccount:gdb-scheduler@game-day-board.iam.gserviceaccount.com --role=roles/run.invoker
+
+# Every 6 hours, all week.
+gcloud scheduler jobs create http gdb-ingest-regular --location us-central1 --project game-day-board \
+  --schedule="0 */6 * * *" --time-zone="Etc/UTC" --uri="$INGEST_URL/run" --http-method=POST \
+  --oidc-service-account-email=gdb-scheduler@game-day-board.iam.gserviceaccount.com \
+  --oidc-token-audience="$INGEST_URL" \
+  --attempt-deadline=120s --max-retry-attempts=2 --min-backoff=60s
+
+# Every 30 minutes from noon to midnight Central time on Saturdays, when most games are played.
+gcloud scheduler jobs create http gdb-ingest-saturday --location us-central1 --project game-day-board \
+  --schedule="*/30 12-23 * * 6" --time-zone="America/Chicago" --uri="$INGEST_URL/run" --http-method=POST \
+  --oidc-service-account-email=gdb-scheduler@game-day-board.iam.gserviceaccount.com \
+  --oidc-token-audience="$INGEST_URL" \
+  --attempt-deadline=120s --max-retry-attempts=2 --min-backoff=60s
+
+# Run once now instead of waiting for the schedule.
+gcloud scheduler jobs run gdb-ingest-regular --location us-central1 --project game-day-board
+```
+
+- `--schedule` uses cron format: minute, hour, day of month, month, day of week. `0 */6 * * *` is "minute 0 of every 6th hour"; `*/30 12-23 * * 6` is "every 30 minutes, hours 12 to 23, on Saturday (day 6)".
+- `--oidc-service-account-email` makes the scheduler sign each call as `gdb-scheduler`. Cloud Run checks that signature and refuses anything else; `--oidc-token-audience` names which service the signature is for.
+- `--max-retry-attempts=2 --min-backoff=60s`: if a run fails, the scheduler tries again after a minute, then again later.
+- Two jobs fit inside the free tier's 3 jobs per billing account (step 0.5).
+
+**Check:** in the console, **☰ menu → Cloud Scheduler** lists both jobs, and **Last run** shows "Success" after the manual run. In **☰ menu → Cloud Run → gdb-ingest → Logs**, the run's line reads "ingest run succeeded" with `gamesSaved` and `callsRemaining`. The first run on 2026-11-23 did a full refresh: 236 games saved, 992 CFBD calls left that month.
+
+**Check that the service is private:** `curl -X POST -d '' <ingest URL>/run` from your own machine answers **403 Forbidden**, because the call carries no signature (NFR-9).
+
+### 1.9 Get an email if the site goes down
+
+```bash
+# Ping /api/health from several places around the world every 5 minutes.
+gcloud monitoring uptime create gdb-web-health --project=game-day-board \
+  --resource-type=uptime-url \
+  --resource-labels=host=gdb-web-442687404328.us-central1.run.app,project_id=game-day-board \
+  --protocol=https --path=/api/health --period=5 --timeout=10
+
+# Where alerts go: an email "notification channel".
+gcloud beta monitoring channels create --display-name="Game Day Board owner email" \
+  --type=email --channel-labels=email_address=<your-email> --project=game-day-board
+
+# The alert rule itself, from infra/uptime-alert-policy.json.
+gcloud beta monitoring policies create --policy-from-file=infra/uptime-alert-policy.json \
+  --notification-channels=<channel name printed by the previous command> --project=game-day-board
+```
+
+- An **uptime check** is a robot visitor. Google calls the health endpoint from outside, the way a real visitor would, so it catches problems a check from inside the project would miss.
+- The **alert policy** in `infra/uptime-alert-policy.json` fires when the check fails from more than one location, so a single unlucky ping does not wake anyone. The check's ID (`gdb-web-health-K6ZhAm6RrfI`) is printed by the first command and must match the one in the policy file.
+- The email address lives only in Google Cloud, never in this repository.
+
+**Check:** **☰ menu → Monitoring → Uptime checks** lists `gdb-web-health` with green ticks; **Monitoring → Alerting** lists "Game Day Board site is down".
+
+**Not built yet:** an alert for stale data (ingest failing quietly while the site stays up), and an alert on the CFBD call count (NFR-7). Both are Milestone 5 items.
+
+### 1.10 Plan: rebuilding it myself
+
+Working through Part 1 in this order, one sitting each, with the SRS beside it:
+
+1. Go basics through `internal/football`: types, methods, table-driven tests.
+2. `internal/retry` and `internal/cfbd`: timeouts, retries, fake servers with `httptest`.
+3. `internal/store` and `internal/ingest`: interfaces, Firestore, idempotent saves, the emulator.
+4. `internal/api`, `internal/web`, `internal/httpx`: routing, JSON, health checks, logging, shutdown.
+5. The React app: components, the `useApi` hook, Mock Service Worker tests.
+6. The Dockerfile and the pipeline.
+7. The cloud resources in steps 1.2 to 1.9, in the console first, then the commands.
 
 ---
 
@@ -508,3 +733,4 @@ These steps are written as they are done:
 | 2026-11-17 | Step 0.7 started: key requested; CFBD tiers and terms recorded |
 | 2026-11-17 | Step 0.7 done: key stored in a gitignored `.env`; `.env.example` added |
 | 2026-11-17 | Added "Reviewing and committing in VS Code" to the start of the guide |
+| 2026-11-23 | Part 1 added: the first version built and deployed in one session by Claude Code; every cloud command recorded (services, Firestore, registry, secret, service accounts, Workload Identity Federation, pipeline, scheduler, uptime alert) |
