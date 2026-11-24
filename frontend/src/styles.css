@@ -1,0 +1,203 @@
+/* Colors are defined once as variables and redefined for dark mode, so every
+   rule below works in both. Text and background pairs meet WCAG AA contrast. */
+:root {
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --text: #1c1c1c;
+  --muted: #5a5a5a;
+  --border: #dcdcd6;
+  --accent: #1f5c99;
+  --accent-text: #ffffff;
+  --error-bg: #fdecec;
+  --error-text: #8a1c1c;
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181b;
+    --surface: #1f2226;
+    --text: #ececec;
+    --muted: #a8a8a8;
+    --border: #3a3e44;
+    --accent: #7fb3e6;
+    --accent-text: #111111;
+    --error-bg: #3a1f1f;
+    --error-text: #ffb4b4;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a { color: var(--accent); }
+
+.container {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+/* Visible only when focused by keyboard, so keyboard users can jump past the header. */
+.skip-link {
+  position: absolute;
+  left: -999px;
+}
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  background: var(--surface);
+  padding: 0.5rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.site-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.5rem;
+}
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+}
+.site-title {
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--text);
+  text-decoration: none;
+}
+nav a {
+  margin-left: 1rem;
+  text-decoration: none;
+}
+nav a.active { font-weight: 700; text-decoration: underline; }
+
+.site-footer {
+  margin-top: 3rem;
+  padding: 1.5rem 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.site-footer p { margin: 0.25rem 0; }
+
+.muted { color: var(--muted); }
+.small { font-size: 0.875rem; }
+
+button {
+  font: inherit;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button:focus-visible, a:focus-visible, select:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.toolbar h1 {
+  font-size: 1.5rem;
+  margin: 0;
+  text-align: center;
+  flex: 1;
+}
+
+.filter {
+  display: inline-block;
+  margin: 1rem 0 0.25rem;
+}
+select {
+  font: inherit;
+  padding: 0.25rem;
+}
+
+.conference-group h2 {
+  font-size: 1.2rem;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0.25rem;
+}
+
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 0.75rem;
+}
+
+.game-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+.team-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1.05rem;
+}
+.team-line.winner { font-weight: 700; }
+.team-score { font-variant-numeric: tabular-nums; }
+.game-meta {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+}
+
+.error-state {
+  background: var(--error-bg);
+  color: var(--error-text);
+  border-radius: 8px;
+  padding: 1rem;
+}
+.error-state p { margin-top: 0; }
+
+.team-page {
+  border-top: 6px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+.team-page h1 { margin-bottom: 0; }
+.record { font-size: 1.1rem; }
+
+.schedule {
+  width: 100%;
+  border-collapse: collapse;
+}
+.schedule th, .schedule td {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.prose { max-width: 42rem; }
