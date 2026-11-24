@@ -1,0 +1,174 @@
+# The pipeline (SRS section 9). On a pull request it only runs the checks.
+# On a push to main it runs the same checks, then builds, deploys, and
+# verifies. Only a green build reaches production.
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: jobs can read the code and nothing else unless they ask.
+permissions:
+  contents: read
+
+env:
+  PROJECT_ID: game-day-board
+  REGION: us-central1
+  REGISTRY: us-central1-docker.pkg.dev/game-day-board/gdb
+
+jobs:
+  backend:
+    name: Go checks and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Check formatting
+        # gofmt -l lists files that are not formatted; any output fails the step.
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; echo "Run gofmt -w . to fix"; exit 1; }
+
+      - name: Vet
+        run: go vet ./... && go vet -tags=integration ./...
+
+      - name: Unit tests
+        # -race detects data races between goroutines.
+        run: go test -race ./...
+
+      # Integration tests need the Firestore emulator, which runs on Java.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Integration tests (Firestore emulator)
+        # emulators:exec starts the emulator, sets FIRESTORE_EMULATOR_HOST for
+        # the command, runs it, and stops the emulator afterwards.
+        run: >
+          npx --yes firebase-tools@14 emulators:exec --only firestore --project demo-game-day-board
+          "go test -tags=integration -count=1 ./internal/store/..."
+
+  frontend:
+    name: React checks and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  secrets:
+    name: Scan for committed secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the whole history, not just the latest commit
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    name: Build, deploy, and verify
+    needs: [backend, frontend, secrets]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # One deploy at a time; a newer push waits rather than racing an older one.
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # lets GitHub issue the short-lived identity token Google trusts
+    steps:
+      - uses: actions/checkout@v7
+
+      # Workload Identity Federation (design decision D10): GitHub proves which
+      # repository this run belongs to, and Google gives back credentials for
+      # the deployer service account that expire within the hour. No key is
+      # stored anywhere.
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/442687404328/locations/global/workloadIdentityPools/github/providers/github-actions
+          service_account: gdb-deployer@game-day-board.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Build and push images
+        # Each image is tagged with the commit ID, so every running version
+        # traces back to an exact commit, and a rollback is a redeploy of an old tag.
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          for target in web ingest; do
+            image="${REGISTRY}/${target}:${GITHUB_SHA}"
+            docker build --target "$target" -t "$image" .
+            docker push "$image"
+          done
+
+      - name: Deploy the ingest service (private)
+        run: |
+          gcloud run deploy gdb-ingest \
+            --image "${REGISTRY}/ingest:${GITHUB_SHA}" \
+            --region "$REGION" \
+            --service-account "gdb-ingest@${PROJECT_ID}.iam.gserviceaccount.com" \
+            --no-allow-unauthenticated \
+            --set-secrets CFBD_API_KEY=cfbd-api-key:latest \
+            --set-env-vars GOOGLE_CLOUD_PROJECT="$PROJECT_ID" \
+            --max-instances 1 --memory 256Mi --timeout 120 \
+            --quiet
+
+      - name: Deploy the site with no traffic, check it, then switch traffic
+        # The new version first gets a private "candidate" address and no
+        # visitors. Only if its health check passes does it receive traffic,
+        # so a broken build never replaces a working one.
+        run: |
+          common=(--image "${REGISTRY}/web:${GITHUB_SHA}" --region "$REGION"
+            --service-account "gdb-api@${PROJECT_ID}.iam.gserviceaccount.com"
+            --allow-unauthenticated --set-env-vars GOOGLE_CLOUD_PROJECT="$PROJECT_ID"
+            --max-instances 2 --memory 256Mi --timeout 30 --quiet)
+
+          if ! gcloud run services describe gdb-web --region "$REGION" >/dev/null 2>&1; then
+            echo "First deploy: creating the service."
+            gcloud run deploy gdb-web "${common[@]}"
+            exit 0
+          fi
+
+          gcloud run deploy gdb-web "${common[@]}" --no-traffic --tag candidate
+          url=$(gcloud run services describe gdb-web --region "$REGION" \
+            --format='value(status.traffic[].url)' | tr ';' '\n' | grep 'candidate---')
+          for i in 1 2 3 4 5; do
+            if curl -fsS "${url}/api/health"; then
+              echo
+              gcloud run services update-traffic gdb-web --region "$REGION" --to-latest --quiet
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "The new version failed its health check; visitors stay on the previous version."
+          exit 1
+
+      - name: Smoke test the live site
+        run: |
+          url=$(gcloud run services describe gdb-web --region "$REGION" --format='value(status.url)')
+          curl -fsS "${url}/api/health"
+          curl -fsS -o /dev/null "${url}/"
+          echo "Live at ${url}"

@@ -1,0 +1,9 @@
+# Keep the build context small, and keep local secrets out of images.
+.git
+.env
+.env.*
+**/node_modules
+frontend/dist
+frontend/coverage
+docs
+infra
