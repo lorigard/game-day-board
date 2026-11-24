@@ -134,6 +134,14 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   flex: 1;
 }
 
+/* On narrow screens, the heading takes its own row above the two buttons. */
+@media (max-width: 40rem) {
+  .toolbar h1 {
+    order: -1;
+    flex-basis: 100%;
+  }
+}
+
 .filter {
   display: inline-block;
   margin: 1rem 0 0.25rem;

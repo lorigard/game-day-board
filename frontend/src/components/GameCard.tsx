@@ -14,7 +14,12 @@ export function GameCard({ game, trackedIds }: GameCardProps) {
   return (
     <article className="game-card" aria-label={`${game.away.name} at ${game.home.name}`}>
       <TeamLine side={game.away} isTracked={trackedIds.has(game.away.teamId)} isWinner={winner === game.away.teamId} />
-      <TeamLine side={game.home} isTracked={trackedIds.has(game.home.teamId)} isWinner={winner === game.home.teamId} />
+      <TeamLine
+        side={game.home}
+        prefix={game.neutralSite ? 'vs.' : 'at'}
+        isTracked={trackedIds.has(game.home.teamId)}
+        isWinner={winner === game.home.teamId}
+      />
       <p className="game-meta">
         <StatusText game={game} />
         {game.venue && <span className="muted"> · {game.neutralSite ? `${game.venue} (neutral site)` : game.venue}</span>}
@@ -23,10 +28,16 @@ export function GameCard({ game, trackedIds }: GameCardProps) {
   );
 }
 
-function TeamLine({ side, isTracked, isWinner }: { side: Side; isTracked: boolean; isWinner: boolean }) {
+/**
+ * One team's row. The home team's row starts with "at" (or "vs." at a
+ * neutral site), the usual way scores are listed: away team first, then home.
+ */
+function TeamLine(props: { side: Side; prefix?: string; isTracked: boolean; isWinner: boolean }) {
+  const { side, prefix, isTracked, isWinner } = props;
   return (
     <div className={isWinner ? 'team-line winner' : 'team-line'}>
       <span className="team-name">
+        {prefix && <span className="muted">{prefix} </span>}
         {isTracked ? <Link to={`/teams/${side.teamId}`}>{side.name}</Link> : side.name}
       </span>
       <span className="team-score">{side.points ?? ''}</span>

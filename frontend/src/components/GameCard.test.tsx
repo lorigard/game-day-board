@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { makeGame } from '../test/server';
@@ -36,6 +36,14 @@ describe('GameCard', () => {
     expect(within(card).getByText('28')).toBeInTheDocument();
     expect(within(card).getByText('Kansas').closest('.team-line')).toHaveClass('winner');
     expect(within(card).getByText('Kansas State').closest('.team-line')).not.toHaveClass('winner');
+  });
+
+  it('marks the home team with "at", or "vs." at a neutral site', () => {
+    expect(within(renderCard()).getByText('Kansas').closest('.team-line')).toHaveTextContent(/^at Kansas/);
+    cleanup();
+    expect(within(renderCard(makeGame({ id: 1, neutralSite: true }))).getByText('Kansas').closest('.team-line')).toHaveTextContent(
+      /^vs\. Kansas/,
+    );
   });
 
   it('does not call a started game live, because the free data has no live scores', () => {
