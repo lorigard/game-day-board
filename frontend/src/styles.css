@@ -3,8 +3,10 @@
 :root {
   --bg: #dfe5ec; /* a light blue-gray, so the white cards stand out */
   --surface: #ffffff;
-  --text: #1c1c1c;
-  --muted: #5a5a5a;
+  /* Text is the deep navy of the card strips, never black, and secondary
+     text is a slate blue-gray, so every color on the page is from one family. */
+  --text: #13294b;
+  --muted: #4f5f78;
   --border: #dcdcd6;
   --accent: #1f5c99;
   --accent-text: #ffffff;
