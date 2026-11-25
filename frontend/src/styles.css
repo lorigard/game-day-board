@@ -237,7 +237,18 @@ select {
      a big winning score, so every card in a row lines up. */
   min-height: 2.1rem;
   font-size: 1.05rem;
+  /* Medium weight, not regular: next to a bold winner, regular-weight text
+     looked faded, as if it were gray. */
+  font-weight: 500;
 }
+
+/* Every team name is the same blue, whether or not it is a link, so a team
+   with no page never looks like a broken link or a mistake. The underline
+   alone marks a link (which also meets accessibility rules, since it does not
+   rely on color). Names with no page get a hover message (see GameCard.tsx). */
+.team-name,
+.team-name a { color: var(--accent); }
+.team-no-page { cursor: help; } /* the question-mark cursor says "hover for an explanation" */
 .team-score {
   font-variant-numeric: tabular-nums; /* every digit the same width, so scores line up */
   font-size: 1.3rem;
@@ -251,15 +262,19 @@ select {
   font-weight: 400;
 }
 
-/* After a final: the winner stands out, the loser steps back. */
-.team-line.won { font-weight: 700; }
+/* After a final, the winner stands out through weight and size: a bold name
+   and a big score. The losing name stays blue, never gray, because gray is
+   the color of the "at Florida · Stadium" line, and a gray name looked as if
+   it belonged to that line. Only the losing score is softened. */
+.team-line.won { font-weight: 800; }
 .team-line.won .team-score {
   font-size: 1.5rem;
   font-weight: 800;
 }
-.team-line.lost,
-.team-line.lost a { color: var(--muted); }
-.team-line.lost .team-score { font-weight: 500; }
+.team-line.lost .team-score {
+  font-weight: 500;
+  color: var(--muted);
+}
 
 /* "at Kansas · Memorial Stadium" under the teams. */
 .game-where {

@@ -93,6 +93,9 @@ function WeekView({ calendar, teams }: { calendar: CurrentWeek; teams: Team[] })
       {games.state.status === 'success' && (
         <>
           <LastUpdated at={games.state.lastUpdated} />
+          {/* Says up front why some names are links and others are not.
+              The cards also explain on hover, but phones cannot hover. */}
+          <p className="muted small">Big 12 and SEC team names link to team pages.</p>
           <GameGroups games={games.state.data} teams={teams} trackedIds={trackedIds} conference={conference} />
         </>
       )}

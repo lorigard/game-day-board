@@ -2,6 +2,9 @@ import { Link } from 'react-router';
 import type { Game, Side } from '../api/types';
 import { formatKickoff } from '../lib/format';
 
+/** Shown on hover over a team that has no page on this site. */
+const NO_PAGE_HINT = 'No team page: this site covers Big 12 and SEC teams only.';
+
 interface GameCardProps {
   game: Game;
   /** IDs of tracked teams. Only those have a team page, so only those are links. */
@@ -71,10 +74,21 @@ interface TeamLineProps {
 function TeamLine({ side, isTracked, result, started }: TeamLineProps) {
   return (
     // The result becomes a CSS class: "won" makes the row bold with a larger
-    // score, "lost" grays it out, "none" leaves it plain.
+    // score, "lost" softens its score, "none" leaves it plain.
     <div className={`team-line ${result}`}>
       <span className="team-name">
-        {isTracked ? <Link to={`/teams/${side.teamId}`}>{side.name}</Link> : side.name}
+        {isTracked ? (
+          <Link to={`/teams/${side.teamId}`}>{side.name}</Link>
+        ) : (
+          // Opponents from other conferences have no team page here. Without
+          // an explanation, a name that is not a link looks like a bug, so
+          // hovering shows why. The "title" attribute is the browser's own
+          // tooltip. Hover does not exist on phones, which is why the home
+          // page also says which names are links (see HomePage.tsx).
+          <span className="team-no-page" title={NO_PAGE_HINT}>
+            {side.name}
+          </span>
+        )}
       </span>
       <span className="team-score">
         <Score points={side.points} started={started} />

@@ -78,4 +78,15 @@ describe('GameCard', () => {
     expect(within(card).getByRole('link', { name: 'Kansas' })).toHaveAttribute('href', '/teams/2305');
     expect(within(card).queryByRole('link', { name: 'Georgia Tech' })).not.toBeInTheDocument();
   });
+
+  it('explains on hover why a team has no link', () => {
+    const card = renderCard(
+      makeGame({ id: 1, away: { teamId: 59, name: 'Georgia Tech', conference: 'ACC', points: null } }),
+    );
+    // The browser shows the title attribute as a tooltip on hover.
+    expect(within(card).getByText('Georgia Tech')).toHaveAttribute(
+      'title',
+      'No team page: this site covers Big 12 and SEC teams only.',
+    );
+  });
 });
