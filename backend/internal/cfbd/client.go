@@ -40,6 +40,15 @@ type Client struct {
 
 // Option changes one setting of a Client. Options keep New's signature short
 // while letting tests swap in a fake server, a fake clock, or a quieter logger.
+//
+// This is the "functional options" pattern, common in Go libraries. Each
+// WithX function below returns a small function that sets one field. New
+// applies them in order after setting the defaults, so a caller writes
+//
+//	cfbd.New(key, cfbd.WithBaseURL(testServer.URL))
+//
+// and changes only what it needs. In C# the same job is often done with
+// optional parameters or an options object.
 type Option func(*Client)
 
 // WithBaseURL points the client at a different server, such as a test server.
@@ -60,6 +69,10 @@ func WithAttemptTimeout(d time.Duration) Option { return func(c *Client) { c.att
 func WithLogger(l *slog.Logger) Option { return func(c *Client) { c.logger = l } }
 
 // New returns a client that authenticates with apiKey.
+//
+// Go note: "opts ...Option" means "any number of Option values", received as
+// a slice. Go has no constructors; a function named New that returns a
+// pointer to a ready-to-use value is the usual stand-in.
 func New(apiKey string, opts ...Option) *Client {
 	c := &Client{
 		baseURL:        DefaultBaseURL,
@@ -81,12 +94,23 @@ func New(apiKey string, opts ...Option) *Client {
 func (c *Client) CallsRemaining() int { return int(c.callsRemaining.Load()) }
 
 // StatusError is returned when the API answers with an HTTP error status.
+//
+// Go note: Go has no exceptions. A function that can fail returns an error as
+// its last result, and the caller checks "if err != nil". Any type with an
+// Error() string method counts as an error, so a custom type like this one
+// can carry extra details (here, the status code) that callers can inspect
+// with errors.As, as retryable does below.
+//
+// Fields that start with a capital letter (StatusCode, Body) are visible to
+// other packages; retryAfter starts lowercase, so only this package sees it.
+// Go uses capitalization instead of words like public and private.
 type StatusError struct {
 	StatusCode int
 	Body       string
 	retryAfter time.Duration
 }
 
+// Error makes *StatusError satisfy Go's built-in error interface.
 func (e *StatusError) Error() string {
 	return fmt.Sprintf("cfbd: HTTP %d: %s", e.StatusCode, e.Body)
 }
@@ -95,6 +119,8 @@ func (e *StatusError) Error() string {
 // and network failures, 429 (too many requests), and 5xx (server errors).
 // Any other 4xx means our request was wrong, and repeating it cannot help.
 func retryable(err error) bool {
+	// errors.As looks through err (and any errors it wraps) for a
+	// *StatusError. If it finds one, it stores it in se and returns true.
 	var se *StatusError
 	if errors.As(err, &se) {
 		return se.StatusCode == http.StatusTooManyRequests || se.StatusCode >= 500
@@ -110,6 +136,8 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 		u += "?" + query.Encode()
 	}
 
+	// The loop runs once for the first try, then once per retry. Attempt 0 is
+	// the first try, so it does not wait; every later attempt waits first.
 	var lastErr error
 	for attempt := 0; attempt <= c.policy.MaxRetries; attempt++ {
 		if attempt > 0 {
@@ -129,15 +157,22 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 		if lastErr == nil {
 			return nil
 		}
+		// Stop early if the caller gave up (ctx canceled) or if trying again
+		// cannot help (for example a 401 because the key is wrong).
 		if ctx.Err() != nil || !retryable(lastErr) {
 			break
 		}
 	}
+	// "%w" wraps lastErr inside the new message instead of just printing it,
+	// so callers can still find the original StatusError with errors.As.
 	return fmt.Errorf("cfbd: %s: %w", path, lastErr)
 }
 
 // attempt makes exactly one request, bounded by the per-attempt timeout.
 func (c *Client) attempt(ctx context.Context, u string, out any) error {
+	// A child context that cancels itself after attemptTimeout. If the server
+	// hangs, the request below is abandoned at that point (NFR-2: nothing
+	// waits forever). cancel releases the timer as soon as we are done.
 	ctx, cancel := context.WithTimeout(ctx, c.attemptTimeout)
 	defer cancel()
 
@@ -145,6 +180,8 @@ func (c *Client) attempt(ctx context.Context, u string, out any) error {
 	if err != nil {
 		return err
 	}
+	// The API key goes in a header, never in the address, so it does not end
+	// up in logs that record addresses.
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
 
@@ -152,8 +189,13 @@ func (c *Client) attempt(ctx context.Context, u string, out any) error {
 	if err != nil {
 		return err
 	}
+	// The response body is a network stream; closing it frees the connection
+	// for reuse. Forgetting this is a classic Go resource leak.
 	defer resp.Body.Close()
 
+	// Remember how many calls are left this month. "if v, err := ...; err == nil"
+	// declares v and err just for this if statement. If the header is missing
+	// or not a number, Atoi returns an error and we keep the last known value.
 	if v, err := strconv.Atoi(resp.Header.Get("X-CallLimit-Remaining")); err == nil {
 		c.callsRemaining.Store(int64(v))
 	}

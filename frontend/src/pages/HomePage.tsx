@@ -10,9 +10,14 @@ import { groupByConference, weekKey, weekLabel } from '../lib/format';
  * previous and next week buttons (FR-7) and a conference filter (FR-13).
  */
 export function HomePage() {
+  // Both requests start at once; neither waits for the other.
   const calendar = useApi<CurrentWeek>('/api/weeks/current');
   const teams = useApi<Team[]>('/api/teams');
 
+  // React note: a component is a function that returns what to draw. It can
+  // return early, like any function, so each "if" below shows a loading or
+  // error view and stops there. Only when both requests have succeeded does
+  // the page go on to draw the week.
   if (calendar.state.status === 'loading') return <Loading what="the season calendar" />;
   if (calendar.state.status === 'error') return <ErrorState message={calendar.state.message} onRetry={calendar.retry} />;
   if (teams.state.status === 'loading') return <Loading what="teams" />;
@@ -21,17 +26,37 @@ export function HomePage() {
   return <WeekView calendar={calendar.state.data} teams={teams.state.data} />;
 }
 
+/**
+ * The week on screen, with its buttons, filter, and games.
+ *
+ * It is a separate component from HomePage because hooks must run in the same
+ * order on every render. HomePage returns early while loading, so it could not
+ * safely call useState for the week index after those returns. Here, the data
+ * is guaranteed to be loaded, and every hook runs every time.
+ *
+ * React note: { calendar, teams } are its "props", the inputs a parent passes
+ * in, like <WeekView calendar={...} teams={...} />.
+ */
 function WeekView({ calendar, teams }: { calendar: CurrentWeek; teams: Team[] }) {
   const { weeks } = calendar;
+  // Which week is showing, as a position in the calendar list. Passing a
+  // function to useState means it runs only once, for the first render,
+  // to start on the current week. findIndex returns -1 if not found, and
+  // Math.max turns that into 0 (the first week) instead.
   const [index, setIndex] = useState(() =>
     Math.max(0, weeks.findIndex((w) => weekKey(w) === weekKey(calendar.current))),
   );
+  // The chosen conference filter; '' means "All".
   const [conference, setConference] = useState('');
   const week = weeks[index] ?? calendar.current;
 
+  // Changing week changes the path, and useApi fetches again on its own.
   const path = `/api/games?season=${week.season}&week=${week.week}&seasonType=${week.seasonType}`;
   const games = useApi<Game[]>(path);
 
+  // useMemo remembers a computed value and only recomputes it when the
+  // listed inputs ([teams]) change, not on every click.
+  // new Set(...) removes duplicates; [...set] turns it back into an array.
   const conferences = useMemo(() => [...new Set(teams.map((t) => t.conference))].sort(), [teams]);
   const trackedIds = useMemo(() => new Set(teams.map((t) => t.id)), [teams]);
 
@@ -61,6 +86,8 @@ function WeekView({ calendar, teams }: { calendar: CurrentWeek; teams: Team[] })
         </select>
       </label>
 
+      {/* "condition && <Thing />" draws Thing only when the condition is true.
+          Exactly one of these three lines draws something at a time. */}
       {games.state.status === 'loading' && <Loading what="games" />}
       {games.state.status === 'error' && <ErrorState message={games.state.message} onRetry={games.retry} />}
       {games.state.status === 'success' && (
@@ -73,6 +100,14 @@ function WeekView({ calendar, teams }: { calendar: CurrentWeek; teams: Team[] })
   );
 }
 
+/**
+ * The games, one section per conference, after the conference filter.
+ *
+ * React note: when drawing a list, each item needs a "key" that is unique
+ * among its siblings and stays the same between renders (here the conference
+ * name, and each game's ID). React uses keys to tell which items changed,
+ * moved, or disappeared, instead of redrawing the whole list.
+ */
 function GameGroups(props: { games: Game[]; teams: Team[]; trackedIds: Set<number>; conference: string }) {
   const groups = groupByConference(props.games, props.teams).filter(
     (g) => props.conference === '' || g.conference === props.conference,

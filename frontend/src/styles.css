@@ -1,7 +1,7 @@
 /* Colors are defined once as variables and redefined for dark mode, so every
    rule below works in both. Text and background pairs meet WCAG AA contrast. */
 :root {
-  --bg: #f7f7f5;
+  --bg: #dfe5ec; /* a light blue-gray, so the white cards stand out */
   --surface: #ffffff;
   --text: #1c1c1c;
   --muted: #5a5a5a;
@@ -10,6 +10,11 @@
   --accent-text: #ffffff;
   --error-bg: #fdecec;
   --error-text: #8a1c1c;
+  /* Game cards: the navy frame, and the strip across the top of each card. */
+  --card-frame: #13294b;
+  --card-strip: #13294b;
+  --card-strip-text: #ffffff;
+  --card-strip-muted: #c9d3e3; /* the date: a little softer than the status word */
   color-scheme: light dark;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
@@ -17,7 +22,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #16181b;
+    --bg: #0f1216;
     --surface: #1f2226;
     --text: #ececec;
     --muted: #a8a8a8;
@@ -26,6 +31,10 @@
     --accent-text: #111111;
     --error-bg: #3a1f1f;
     --error-text: #ffb4b4;
+    /* A softer navy, so the cards are not harsh against the dark page. The
+       strip text colors stay the same, so they are not repeated here. */
+    --card-frame: #3d5a85;
+    --card-strip: #22395e;
   }
 }
 
@@ -163,22 +172,100 @@ select {
   gap: 0.75rem;
 }
 
+/* ---- Game cards ----
+   Each card is a white box with a navy frame and a navy strip across the
+   top. The strip holds the status (FINAL, UPCOMING, KICKED OFF) and the date;
+   the body holds the two teams and a line saying where the game is played.
+   The colors are variables defined at the top of this file, so dark mode only
+   has to change the variables, not these rules. */
 .game-card {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
+  border: 2px solid var(--card-frame);
+  border-radius: 10px;
+  /* overflow: hidden clips the strip's square corners to the card's rounded ones. */
+  overflow: hidden;
+  /* A soft shadow lifts the card off the page background. */
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+  /* "transition" animates the hover change below instead of snapping. */
+  transition: box-shadow 150ms ease, transform 150ms ease;
 }
+.game-card:hover {
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+  transform: translateY(-1px);
+}
+/* Some people set their computer to reduce motion (it can cause dizziness).
+   This media query respects that setting by turning the lift off. */
+@media (prefers-reduced-motion: reduce) {
+  .game-card { transition: none; }
+  .game-card:hover { transform: none; }
+}
+
+/* The navy strip. "baseline" lines up the small status word and the date on
+   the bottom of their letters, even though they are different sizes. */
+.game-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.4rem 1rem;
+  background: var(--card-strip);
+  color: var(--card-strip-text);
+}
+/* One style for every status word, so FINAL, UPCOMING, and KICKED OFF match. */
+.game-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase; /* written "Final" in the code, shown as "FINAL" */
+  white-space: nowrap; /* never break the word across two lines */
+}
+.game-when {
+  font-size: 0.8rem;
+  color: var(--card-strip-muted);
+  text-align: right;
+}
+
+.game-body {
+  padding: 0.55rem 1rem 0.7rem;
+}
+
 .team-line {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  /* A fixed minimum height means a row with no score is as tall as a row with
+     a big winning score, so every card in a row lines up. */
+  min-height: 2.1rem;
   font-size: 1.05rem;
 }
-.team-line.winner { font-weight: 700; }
-.team-score { font-variant-numeric: tabular-nums; }
-.game-meta {
-  margin: 0.5rem 0 0;
-  font-size: 0.875rem;
+.team-score {
+  font-variant-numeric: tabular-nums; /* every digit the same width, so scores line up */
+  font-size: 1.3rem;
+  font-weight: 600;
+  min-width: 2ch; /* keeps space for two digits so names do not shift */
+  text-align: right;
+}
+/* The gray dash shown for a game that has kicked off but has no score yet. */
+.score-pending {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* After a final: the winner stands out, the loser steps back. */
+.team-line.won { font-weight: 700; }
+.team-line.won .team-score {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+.team-line.lost,
+.team-line.lost a { color: var(--muted); }
+.team-line.lost .team-score { font-weight: 500; }
+
+/* "at Kansas · Memorial Stadium" under the teams. */
+.game-where {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
 .error-state {

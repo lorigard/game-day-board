@@ -21,7 +21,7 @@ Game Day Board shows this week's college football games and scores for the Big 1
 | `Dockerfile` | Multi-stage build with two targets: `web` and `ingest` |
 | `.github/workflows/ci-cd.yml` | Checks and tests on every push; deploy to Cloud Run on `main` |
 | `infra/` | Cloud resource settings that are files (for example the image cleanup policy) |
-| `docs/` | `BUILD-GUIDE.md`, `ARCHITECTURE.md`, `AI-WORKFLOW.md` |
+| `docs/` | `SRS.md` (requirements and design decisions), `ARCHITECTURE.md`, `BUILD-GUIDE.md`, `AI-WORKFLOW.md` |
 
 ## Commands
 
@@ -46,4 +46,4 @@ Integration tests (`-tags=integration`) need the Firestore emulator, which needs
 - Clear names, small functions, one job each.
 - Anything that talks to the outside world (CFBD, Firestore, the clock) sits behind an interface or a parameter, so tests can use a fake.
 - Every requirement-related change has a test. Test names say the expected behavior. No real network or real sleeping in unit tests.
-- Requirement IDs (FR-n, NFR-n) and design decision IDs (Dn) refer to the Software Requirements Specification.
+- Requirement IDs (FR-n, NFR-n) and design decision IDs (Dn) refer to the Software Requirements Specification, `docs/SRS.md`. Keep its "What was built differently" table current when a change departs from the plan.

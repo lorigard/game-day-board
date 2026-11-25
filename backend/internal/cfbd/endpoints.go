@@ -1,3 +1,7 @@
+// This file holds the three CollegeFootballData endpoints we use, and the
+// shapes of their responses. client.go holds the shared plumbing (timeouts,
+// retries, the quota count) that every endpoint goes through.
+
 package cfbd
 
 import (
@@ -61,6 +65,8 @@ type GamesQuery struct {
 // covers every conference; the ingest service keeps only the teams it tracks,
 // which costs fewer calls than asking once per conference.
 func (c *Client) Games(ctx context.Context, q GamesQuery) ([]Game, error) {
+	// url.Values builds the "?year=2026&week=13" part of the address and
+	// escapes any special characters for us.
 	v := url.Values{}
 	v.Set("year", strconv.Itoa(q.Year))
 	v.Set("classification", "fbs")
@@ -70,6 +76,8 @@ func (c *Client) Games(ctx context.Context, q GamesQuery) ([]Game, error) {
 	if q.SeasonType != "" {
 		v.Set("seasonType", q.SeasonType)
 	}
+	// get fills games from the JSON response. We pass &games (a pointer) so
+	// get can write into our variable rather than into a copy of it.
 	var games []Game
 	err := c.get(ctx, "/games", v, &games)
 	return games, err

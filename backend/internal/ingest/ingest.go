@@ -26,6 +26,11 @@ const FullRefreshEvery = 7 * 24 * time.Hour
 
 // Source is the part of the CollegeFootballData client that ingest uses.
 // Tests pass a fake that returns canned data.
+//
+// Defining the interface here, where it is used, rather than in the cfbd
+// package is a Go habit: "accept interfaces, return concrete types". The
+// ingest package says exactly what it needs and nothing more, and *cfbd.Client
+// satisfies it without knowing this interface exists.
 type Source interface {
 	Games(ctx context.Context, q cfbd.GamesQuery) ([]cfbd.Game, error)
 	Teams(ctx context.Context, conference string) ([]cfbd.Team, error)
@@ -33,13 +38,17 @@ type Source interface {
 	CallsRemaining() int
 }
 
-// Runner performs ingest runs.
+// Runner performs ingest runs. Everything it depends on is a field, set by
+// whoever creates it (cmd/ingest/main.go in production, the tests in tests).
+// This is dependency injection done by hand, with no framework.
 type Runner struct {
 	Source      Source
 	Store       store.Store
 	Conferences []string // CollegeFootballData abbreviations, for example "SEC" and "B12"
-	Now         func() time.Time
-	Logger      *slog.Logger
+	// Now returns the current time. Production passes time.Now; tests pass a
+	// function that returns a fixed time, so "which week is it?" is predictable.
+	Now    func() time.Time
+	Logger *slog.Logger
 }
 
 // Result summarizes one run, for the ingest endpoint's response and the logs.
@@ -78,6 +87,9 @@ func (r *Runner) Run(ctx context.Context) (Result, error) {
 	// Record the outcome even when the run failed: the error message is what
 	// the operator needs to see. Use a fresh context so a run that timed out can
 	// still save its status.
+	// context.WithoutCancel keeps the request's values (such as its trace ID
+	// for the logs) but drops its deadline; WithTimeout then gives the save
+	// its own 5 seconds.
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if err := r.Store.SaveIngestStatus(saveCtx, status); err != nil {
@@ -86,6 +98,8 @@ func (r *Runner) Run(ctx context.Context) (Result, error) {
 	return res, runErr
 }
 
+// run decides which kind of run this is. A zero time (IsZero) means a full
+// refresh has never happened, so the store has no teams or calendar yet.
 func (r *Runner) run(ctx context.Context, now time.Time, status football.IngestStatus) (Result, error) {
 	if status.LastFullRefreshAt.IsZero() || now.Sub(status.LastFullRefreshAt) >= FullRefreshEvery {
 		return r.fullRefresh(ctx, now)
@@ -93,6 +107,11 @@ func (r *Runner) run(ctx context.Context, now time.Time, status football.IngestS
 	return r.currentWeek(ctx, now)
 }
 
+// fullRefresh fetches the season calendar, the tracked conferences' teams,
+// and every regular-season and postseason game, then saves them. Order
+// matters: teams come before games, because the team list decides which
+// games to keep. It stops at the first failure; whatever was saved before
+// that point stays saved, and the next run tries again.
 func (r *Runner) fullRefresh(ctx context.Context, now time.Time) (Result, error) {
 	season := football.SeasonFor(now)
 	res := Result{FullRefresh: true}
@@ -136,6 +155,8 @@ func (r *Runner) fullRefresh(ctx context.Context, now time.Time) (Result, error)
 	return res, nil
 }
 
+// currentWeek refreshes only this week's games: one outside call. It reads
+// the calendar and team list from our own store, which costs no CFBD calls.
 func (r *Runner) currentWeek(ctx context.Context, now time.Time) (Result, error) {
 	weeks, err := r.Store.Calendar(ctx)
 	if err != nil {
@@ -162,9 +183,12 @@ func (r *Runner) currentWeek(ctx context.Context, now time.Time) (Result, error)
 }
 
 // saveTracked keeps games that involve at least one tracked team, then saves them.
+// It returns how many it saved.
 func (r *Runner) saveTracked(ctx context.Context, games []cfbd.Game, tracked map[int]bool, now time.Time) (int, error) {
 	var keep []football.Game
 	for _, g := range games {
+		// Looking up a missing key in a map returns the zero value, false
+		// for a bool, so an untracked team simply reads as false here.
 		if tracked[g.HomeID] || tracked[g.AwayID] {
 			keep = append(keep, mapGame(g, now))
 		}
@@ -175,6 +199,9 @@ func (r *Runner) saveTracked(ctx context.Context, games []cfbd.Game, tracked map
 	return len(keep), nil
 }
 
+// teamIDs turns a team list into a set of IDs. Go has no built-in set type;
+// a map whose values are all true is the usual stand-in, and checking it is
+// much faster than searching the list for every game.
 func teamIDs(teams []football.Team) map[int]bool {
 	ids := make(map[int]bool, len(teams))
 	for _, t := range teams {
@@ -186,29 +213,62 @@ func teamIDs(teams []football.Team) map[int]bool {
 // The map functions translate CollegeFootballData's shape into ours. This is
 // the only place that knows both, so an API change is fixed here and nowhere else.
 
+// mapGame converts one CFBD game into ours. CFBD lists home and away fields
+// side by side (HomeTeam, AwayTeam, ...); we group each team's fields into a
+// Side. Times are stored in UTC; the browser converts them to local time.
 func mapGame(g cfbd.Game, now time.Time) football.Game {
 	return football.Game{
-		ID: g.ID, Season: g.Season, Week: g.Week, SeasonType: g.SeasonType,
-		StartTime: g.StartDate.UTC(), StartTimeTBD: g.StartTimeTBD, Completed: g.Completed,
-		NeutralSite: g.NeutralSite, ConferenceGame: g.ConferenceGame, Venue: g.Venue,
-		Home:      football.Side{TeamID: g.HomeID, Name: g.HomeTeam, Conference: g.HomeConference, Points: g.HomePoints},
-		Away:      football.Side{TeamID: g.AwayID, Name: g.AwayTeam, Conference: g.AwayConference, Points: g.AwayPoints},
+		ID:             g.ID,
+		Season:         g.Season,
+		Week:           g.Week,
+		SeasonType:     g.SeasonType,
+		StartTime:      g.StartDate.UTC(),
+		StartTimeTBD:   g.StartTimeTBD,
+		Completed:      g.Completed,
+		NeutralSite:    g.NeutralSite,
+		ConferenceGame: g.ConferenceGame,
+		Venue:          g.Venue,
+		Home: football.Side{
+			TeamID:     g.HomeID,
+			Name:       g.HomeTeam,
+			Conference: g.HomeConference,
+			Points:     g.HomePoints,
+		},
+		Away: football.Side{
+			TeamID:     g.AwayID,
+			Name:       g.AwayTeam,
+			Conference: g.AwayConference,
+			Points:     g.AwayPoints,
+		},
 		UpdatedAt: now,
 	}.WithKeys()
 }
 
+// mapTeam converts one CFBD team into ours.
 func mapTeam(t cfbd.Team, now time.Time) football.Team {
 	return football.Team{
-		ID: t.ID, School: t.School, Mascot: t.Mascot, Abbreviation: t.Abbreviation,
-		Conference: t.Conference, Color: t.Color, AlternateColor: t.AlternateColor, UpdatedAt: now,
+		ID:             t.ID,
+		School:         t.School,
+		Mascot:         t.Mascot,
+		Abbreviation:   t.Abbreviation,
+		Conference:     t.Conference,
+		Color:          t.Color,
+		AlternateColor: t.AlternateColor,
+		UpdatedAt:      now,
 	}
 }
 
+// mapWeeks converts the CFBD season calendar into ours.
 func mapWeeks(ws []cfbd.Week) []football.Week {
 	out := make([]football.Week, 0, len(ws))
 	for _, w := range ws {
-		out = append(out, football.Week{Season: w.Season, Week: w.Week, SeasonType: w.SeasonType,
-			Start: w.StartDate.UTC(), End: w.EndDate.UTC()})
+		out = append(out, football.Week{
+			Season:     w.Season,
+			Week:       w.Week,
+			SeasonType: w.SeasonType,
+			Start:      w.StartDate.UTC(),
+			End:        w.EndDate.UTC(),
+		})
 	}
 	return out
 }

@@ -30,11 +30,19 @@ const (
 )
 
 // Side is one team's half of a game: who they are and how many points they scored.
+//
+// Go note: the text in backquotes after each field is a "struct tag". Other
+// packages read it to learn what to call the field. `json:"teamId"` means the
+// field is written as "teamId" in API responses (Go's TeamID would otherwise be
+// used as is), and `firestore:"teamId"` does the same for the database. A tag
+// of `json:"-"` means "never send this field in JSON".
 type Side struct {
 	TeamID     int    `firestore:"teamId" json:"teamId"`
 	Name       string `firestore:"name" json:"name"`
 	Conference string `firestore:"conference" json:"conference"`
 	// Points is a pointer because "no score yet" (nil) is different from a score of 0.
+	// A plain int can never be "missing": its zero value is 0. A *int can be nil,
+	// which becomes null in JSON, and the React app shows null as "no score".
 	Points *int `firestore:"points" json:"points"`
 }
 
@@ -65,6 +73,11 @@ func TeamSeasonKey(season, teamID int) string {
 }
 
 // WithKeys returns a copy of the game with TeamSeasonKeys filled in for both teams.
+//
+// Go note: "(g Game)" makes this a method on Game. Because g is a Game value,
+// not a pointer (*Game), the method works on a copy: setting g.TeamSeasonKeys
+// below changes only the copy, which is returned. The caller's game is left
+// alone, so there is no hidden change to data someone else is holding.
 func (g Game) WithKeys() Game {
 	g.TeamSeasonKeys = []string{
 		TeamSeasonKey(g.Season, g.Home.TeamID),
@@ -76,6 +89,8 @@ func (g Game) WithKeys() Game {
 // Status reports whether the game is scheduled, started, or final at the given time.
 // The time is passed in rather than read from the clock so tests are exact.
 func (g Game) Status(now time.Time) string {
+	// Go note: a "switch" with nothing after the word works like a chain of
+	// if / else if: Go runs the first case whose condition is true.
 	switch {
 	case g.Completed:
 		return StatusFinal
@@ -120,8 +135,13 @@ func CurrentWeek(weeks []Week, now time.Time) (Week, bool) {
 	if len(weeks) == 0 {
 		return Week{}, false
 	}
+	// next stays nil until we find a week that starts in the future, so nil
+	// means "no future week found yet". last tracks the week that ends latest.
 	var next *Week
 	last := weeks[0]
+	// Go note: "for i := range weeks" loops over the index of each week.
+	// We need the index so that next can point at the week inside the slice
+	// itself (&weeks[i]) instead of at a temporary copy.
 	for i := range weeks {
 		w := weeks[i]
 		if w.Contains(now) {
@@ -155,12 +175,19 @@ func RecordFor(teamID int, games []Game) Record {
 		if !g.Completed || g.Home.Points == nil || g.Away.Points == nil {
 			continue
 		}
+		// Start from the home team's point of view. The "*" reads the number a
+		// pointer points at; the nil checks above make that safe.
 		us, them := *g.Home.Points, *g.Away.Points
 		switch teamID {
 		case g.Home.TeamID:
+			// Already from the home team's point of view; nothing to do.
+			// (Go cases do not "fall through" to the next one, so an empty
+			// case is a real "do nothing", unlike C# or JavaScript.)
 		case g.Away.TeamID:
+			// Go can swap two variables in one line, with no temporary variable.
 			us, them = them, us
 		default:
+			// The team did not play in this game.
 			continue
 		}
 		switch {

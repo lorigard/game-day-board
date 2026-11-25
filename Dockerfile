@@ -33,6 +33,9 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api \
 # nonroot variant runs the program as an unprivileged user.
 FROM gcr.io/distroless/static-debian12:nonroot AS web
 COPY --from=backend /out/api /server
+# The built React pages ride in the same image, so one Cloud Run service serves
+# the whole site. Moving the pages to a CDN would remove these two lines; see
+# docs/ARCHITECTURE.md, "Decision: one service for the pages and the API".
 COPY --from=frontend /src/dist /static
 ENV STATIC_DIR=/static
 ENTRYPOINT ["/server"]

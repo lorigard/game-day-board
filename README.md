@@ -6,6 +6,8 @@ This week's college football games and scores for the Big 12 and the SEC, with a
 
 **Status:** the first version is running. It is a learning project for a stack that is new to me (Go, React, and Google Cloud), and I am now working through every part of it step by step. See [How AI is used on this project](docs/AI-WORKFLOW.md).
 
+**Design documents:** [requirements and design decisions](docs/SRS.md) (written before any code, with a list of what was built differently) · [architecture](docs/ARCHITECTURE.md) · [build guide](docs/BUILD-GUIDE.md)
+
 ## What it does
 
 - Shows one week's games at a time, grouped by conference, with kickoff times in your own time zone and final scores. Previous and next week buttons, and a conference filter.
@@ -14,7 +16,7 @@ This week's college football games and scores for the Big 12 and the SEC, with a
 
 ## What it does not do
 
-- **Scores are not live.** The free data plan has no live scoreboard. Data refreshes every 6 hours, and every 30 minutes on Saturday afternoons and evenings. A game that has kicked off shows "In progress or awaiting final score" until its result arrives.
+- **Scores are not live.** The free data plan has no live scoreboard. Data refreshes every 6 hours, and every 30 minutes on Saturday afternoons and evenings. A game that has kicked off is labeled "Kicked off", with a dash in place of each score, until its result arrives.
 - Only the Big 12 and the SEC. No accounts, and nothing related to betting.
 
 ## How it is built
@@ -27,6 +29,7 @@ This week's college football games and scores for the Big 12 and the SEC, with a
 | Hosting | Google Cloud Run (the site and API in one service; ingest as a private service), Cloud Scheduler, Secret Manager |
 | CI/CD | GitHub Actions: Go and React checks, unit, component, and integration tests, and a secret scan on every push; deploys to Cloud Run with Workload Identity Federation, so no cloud key is stored anywhere |
 
+- [Requirements and design decisions](docs/SRS.md): what the app must do, and why each technology was chosen over the alternatives, written before building. Ends with every way the first version differs from the plan.
 - [Architecture](docs/ARCHITECTURE.md): the diagram, the two data paths, and the availability features (health checks, timeouts, retries with backoff, graceful shutdown, structured logs).
 - [Build guide](docs/BUILD-GUIDE.md): every setup step, with commands and reasons, to rebuild the project from an empty machine.
 

@@ -1,3 +1,7 @@
+// This file is the production Store, backed by Google Cloud Firestore, a
+// document database: data is stored as documents (like JSON objects) grouped
+// into collections, with no tables or SQL.
+
 package store
 
 import (
@@ -35,6 +39,7 @@ type Firestore struct {
 	client *firestore.Client
 }
 
+// Compile-time check that Firestore satisfies Store (see the same line in memory.go).
 var _ Store = (*Firestore)(nil)
 
 // NewFirestore connects to the default database of projectID.
@@ -54,7 +59,13 @@ type calendarDocument struct {
 	Weeks []football.Week `firestore:"weeks"`
 }
 
+// The exported methods below implement Store; their documentation is on the
+// interface in store.go. Comments here explain how, not what.
+
 func (f *Firestore) SaveGames(ctx context.Context, games []football.Game) error {
+	// The function passed to bulkSet says, for item i, which document to
+	// write and what to put in it. The document ID is the CFBD game ID, so
+	// saving the same game again overwrites it instead of adding a copy.
 	return f.bulkSet(ctx, len(games), func(i int) (*firestore.DocumentRef, any) {
 		g := games[i].WithKeys()
 		return f.client.Collection(gamesCollection).Doc(strconv.Itoa(g.ID)), g
@@ -73,7 +84,11 @@ func (f *Firestore) bulkSet(ctx context.Context, n int, doc func(i int) (*firest
 	if n == 0 {
 		return nil
 	}
+	// A BulkWriter sends many writes at once instead of one round trip each.
+	// Each Set returns a "job" we can ask about later, once all are sent.
 	bw := f.client.BulkWriter(ctx)
+	// make([]T, 0, n) creates an empty slice with room for n items, so append
+	// never has to grow it. A small speed habit, not a requirement.
 	jobs := make([]*firestore.BulkWriterJob, 0, n)
 	for i := 0; i < n; i++ {
 		ref, data := doc(i)
@@ -174,9 +189,15 @@ func (f *Firestore) get(ctx context.Context, ref *firestore.DocumentRef, dst any
 }
 
 // readAll decodes every document from an iterator into a slice of T.
+//
+// Go note: [T any] makes this a generic function, like a C# method with <T>.
+// The caller picks T, for example readAll[football.Game](...), and one
+// function serves games and teams alike.
 func readAll[T any](ctx context.Context, it *firestore.DocumentIterator) ([]T, error) {
 	defer it.Stop()
 	var out []T
+	// "for" with no condition loops forever; the returns inside end it.
+	// Firestore signals the end of the results with the special iterator.Done error.
 	for {
 		snap, err := it.Next()
 		if errors.Is(err, iterator.Done) {

@@ -43,11 +43,25 @@ func run(logger *slog.Logger) error {
 	}
 	defer db.Close()
 
+	// The production pieces are chosen here and nowhere else: the real
+	// database and the real clock. Tests build the same api.Server with an
+	// in-memory store and a fixed clock instead.
 	srv := &api.Server{Store: db, Now: time.Now}
 	var handler http.Handler = srv.Routes()
+	// With STATIC_DIR set (as it is in the container), this same service also
+	// serves the React pages. Without it (for example when running the API alone
+	// on your machine while Vite serves the pages), only /api/ answers. Why one
+	// service instead of a CDN: docs/ARCHITECTURE.md, "Decision: one service for
+	// the pages and the API".
 	if dir := os.Getenv("STATIC_DIR"); dir != "" {
 		handler = web.Handler(handler, os.DirFS(dir))
 	}
+	// Handlers are wrapped like layers of an onion. A request passes through
+	// the outermost layer first: Middleware (logging, trace ID, panic
+	// recovery), then web.Handler (pages or API), then the API routes. That
+	// way every request is logged, whether it is for a page or for data.
 	handler = httpx.Middleware(logger, projectID, handler)
+	// 8 seconds to finish requests in progress after SIGTERM: under the
+	// 10 seconds Cloud Run allows before it stops the instance for good.
 	return httpx.Serve(ctx, httpx.NewServer(httpx.Getenv("PORT", "8080"), handler), logger, 8*time.Second)
 }

@@ -5,6 +5,12 @@
 // React Router then changes pages without asking the server. So a request for
 // a page such as /teams/2305 has no matching file, and the server answers with
 // index.html; React reads the address and shows the right page.
+//
+// Design note: serving the pages and the API from one service is a deliberate
+// choice for a small site. The common alternative is to put the pages on a CDN
+// (such as Firebase Hosting) and keep only the API here. The tradeoff, and when
+// we would switch, is in docs/ARCHITECTURE.md under "Decision: one service for
+// the pages and the API".
 package web
 
 import (
@@ -23,6 +29,9 @@ func Handler(api http.Handler, files fs.FS) http.Handler {
 			return
 		}
 
+		// path.Clean removes tricks like "/../" so a request can never reach
+		// outside the site's folder. (fs.FS refuses such names too; this is a
+		// second layer of the same protection.)
 		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if name == "" || !exists(files, name) {
 			serveIndex(w, r, files)
@@ -49,8 +58,11 @@ func serveIndex(w http.ResponseWriter, r *http.Request, files fs.FS) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
+	// A HEAD request asks for the headers only (uptime checkers use it), so
+	// the body is skipped. A write error means the visitor already went away,
+	// and there is no one left to tell, so it is ignored on purpose ("_, _ =").
 	if r.Method != http.MethodHead {
-		w.Write(data)
+		_, _ = w.Write(data)
 	}
 }
 

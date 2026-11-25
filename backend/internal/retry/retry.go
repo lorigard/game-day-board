@@ -36,7 +36,10 @@ func (p Policy) Delay(n int) time.Duration {
 	if n > 30 {
 		return time.Duration(p.rand() * float64(p.MaxDelay))
 	}
-	limit := p.BaseDelay << (n - 1) // doubles each retry: base, 2x, 4x, ...
+	// "<<" shifts the number's bits left; each shift by one doubles it. So the
+	// limit is base, then 2x base, then 4x base, and so on for each retry.
+	// With a 500 ms base: up to 0.5 s, 1 s, 2 s, then capped at MaxDelay.
+	limit := p.BaseDelay << (n - 1)
 	if limit > p.MaxDelay {
 		limit = p.MaxDelay
 	}
@@ -51,10 +54,20 @@ func (p Policy) rand() float64 {
 }
 
 // Sleep waits for d, or returns early with the context's error if the context
-// is cancelled first, so a shutting-down service never waits out a backoff.
+// is canceled first, so a shutting-down service never waits out a backoff.
+//
+// Go note: a context.Context carries a deadline and a "cancel" signal through
+// a chain of calls. When a request times out, or the service is told to shut
+// down, the context is canceled and ctx.Done() is closed, so everything
+// waiting on it can stop early. Almost every function that waits on something
+// in Go takes a ctx as its first argument for this reason.
 func Sleep(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
+	// "defer" runs timer.Stop() when this function returns, however it
+	// returns, so the timer is always cleaned up.
 	defer timer.Stop()
+	// "select" waits until one of its cases is ready and runs that one. Here:
+	// whichever comes first, the cancel signal or the timer firing.
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

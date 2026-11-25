@@ -8,7 +8,7 @@ This guide records every step taken to build Game Day Board, in order, with the 
 - Commands are for **PowerShell on Windows** unless a step says otherwise. Lines starting with `#` are comments, not commands.
 - Text in angle brackets, such as `<your-github-username>`, is a placeholder. Replace it, brackets included.
 - Never paste a real key, password, or token into this file. Steps that involve secrets say where the secret is kept instead.
-- The requirements and design decisions are in the Software Requirements Specification (SRS). Requirement IDs such as FR-2 or NFR-8, and decision IDs such as D4, refer to it.
+- The requirements and design decisions are in the Software Requirements Specification ([SRS.md](SRS.md)). Requirement IDs such as FR-2 or NFR-8, and decision IDs such as D4, refer to it.
 
 **Reviewing and committing in VS Code**
 
@@ -152,7 +152,7 @@ Newer versions should work. If a later step behaves differently from what this g
 
    **Expected:** the four files above are listed as untracked.
 
-**Why it matters:** the repository will be public from the first commit, and everything in its history is public forever, even if it is deleted later. If a secret is ever committed, deleting the file is not enough: the secret must be cancelled (revoked) and replaced.
+**Why it matters:** the repository will be public from the first commit, and everything in its history is public forever, even if it is deleted later. If a secret is ever committed, deleting the file is not enough: the secret must be canceled (revoked) and replaced.
 
 ### 0.3 Keep your email address private in commits
 
@@ -458,11 +458,11 @@ Free Tier (monthly, no end date; Google may change it with 30 days' notice; unus
 | Fact | Effect on this project |
 | --- | --- |
 | Free tier: **1,000 calls a month**, no card needed | The plan uses about 250 (NFR-7), under half |
-| **Live scoreboard is not in the free tier.** It starts at the $1 a month tier (Tier 1, 5,000 calls a month) | The app works out "in progress" as "started and not yet marked complete" (SRS 7.1). Whether to pay for live status is decided in Milestone 1 |
+| **Live scoreboard is not in the free tier.** It starts at the $1 a month tier (Tier 1, 5,000 calls a month) | The app works out "in progress" as "started and not yet marked complete" (SRS 7.1). Decided 2026-11-23: stay on the free tier. A started game is labeled "Kicked off", with a dash for each score, until its final arrives |
 | One key and one shared monthly limit cover both college football and college basketball | Only football is used, so no effect |
 | Scheduled polling and server-side caching are encouraged; excessive polling is prohibited | Matches design decision D2: ingest on a timer, serve from Firestore |
 | Keys must not be put in a public repository or in browser code | The key lives only on the server side (ingest service), never in the React app |
-| Going over the quota may suspend the key | Why NFR-7 counts calls and alerts at 60 percent |
+| Going over the quota may suspend the key | Why NFR-7 asks for a call count and an alert at 60 percent. The count is logged on every run; the alert is not built yet (step 1.9) |
 | No service-level agreement; features can change without notice | Another reason to serve from our own copy (D2, NFR-4) |
 | Attribution is appreciated but not required; suggested text "Data provided by CollegeFootballData.com" | Shown on every page anyway (FR-10) |
 | Running a public mirror, proxy, or substitute API of the data is prohibited | The read API exists only to serve this site's pages. It is described as the site's back end, never advertised as a public data API |
@@ -690,7 +690,7 @@ gcloud beta monitoring policies create --policy-from-file=infra/uptime-alert-pol
 
 ### 1.10 Plan: rebuilding it myself
 
-Working through Part 1 in this order, one sitting each, with the SRS beside it:
+Working through Part 1 in this order, one sitting each, with the [SRS](SRS.md) beside it:
 
 1. Go basics through `internal/football`: types, methods, table-driven tests.
 2. `internal/retry` and `internal/cfbd`: timeouts, retries, fake servers with `httptest`.
@@ -734,3 +734,4 @@ Working through Part 1 in this order, one sitting each, with the SRS beside it:
 | 2026-11-17 | Step 0.7 done: key stored in a gitignored `.env`; `.env.example` added |
 | 2026-11-17 | Added "Reviewing and committing in VS Code" to the start of the guide |
 | 2026-11-23 | Part 1 added: the first version built and deployed in one session by Claude Code; every cloud command recorded (services, Firestore, registry, secret, service accounts, Workload Identity Federation, pipeline, scheduler, uptime alert) |
+| 2026-11-25 | Review round with Lori: links to other sites open in a new tab (`ExternalLink`); new game card design (navy strip with FINAL, UPCOMING, or KICKED OFF and the date; "at Kansas · Memorial Stadium" line; a dash for scores of games that have kicked off); "one service for pages and API" written up as a decision in ARCHITECTURE.md; teaching comments added through the Go and React code ("Go note", "React note", "TypeScript note"); the in-memory test store now reports unknown calls remaining as -1, like Firestore; stale `/readyz`, CDN, and Firebase mentions fixed; the TV network idea added to the SRS as future feature F1 |

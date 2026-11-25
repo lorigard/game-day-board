@@ -1,5 +1,10 @@
 // Shapes of the data the back end returns. They mirror the Go types in
-// backend/internal/football and backend/internal/api.
+// backend/internal/football and backend/internal/api: the JSON names here
+// match the `json:"..."` tags there. If one side changes, change the other.
+//
+// TypeScript note: types exist only while compiling; none of this reaches the
+// browser. A type like 'regular' | 'postseason' allows exactly those two
+// strings, so a typo such as 'regualr' is caught before the code ever runs.
 
 export type SeasonType = 'regular' | 'postseason';
 export type GameStatus = 'scheduled' | 'started' | 'final';

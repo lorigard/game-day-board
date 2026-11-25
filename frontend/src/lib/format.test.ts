@@ -9,7 +9,7 @@ describe('formatKickoff', () => {
   });
 
   it('shows only the day when the time is not decided', () => {
-    expect(formatKickoff('2026-11-28T05:00:00Z', true, 'America/Chicago')).toBe('Fri, Nov 27, time to be announced');
+    expect(formatKickoff('2026-11-28T05:00:00Z', true, 'America/Chicago')).toBe('Fri, Nov 27 · Time TBA');
   });
 });
 

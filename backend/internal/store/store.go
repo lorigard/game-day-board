@@ -16,6 +16,11 @@ import (
 var ErrNotFound = errors.New("not found")
 
 // Store is everything the services need from the database.
+//
+// Go note: an interface lists methods, and any type that has those methods
+// satisfies it automatically. There is no "implements" keyword as in C#.
+// Firestore (firestore.go) and Memory (memory.go) both satisfy Store, so code
+// that takes a Store works with either one.
 type Store interface {
 	// SaveGames writes games keyed by their ID, so saving the same game twice
 	// overwrites it rather than adding a copy (idempotent, FR-2).
@@ -29,9 +34,10 @@ type Store interface {
 	Team(ctx context.Context, id int) (football.Team, error)
 	Teams(ctx context.Context) ([]football.Team, error)
 	Calendar(ctx context.Context) ([]football.Week, error)
-	// IngestStatus returns the zero value, not an error, if ingest has never run.
+	// IngestStatus returns an empty status, not an error, if ingest has never
+	// run. Its CallsRemaining is -1, meaning "unknown", as everywhere else.
 	IngestStatus(ctx context.Context) (football.IngestStatus, error)
 
-	// Ping checks that the database can be reached; /readyz uses it (NFR-1).
+	// Ping checks that the database can be reached; /api/ready uses it (NFR-1).
 	Ping(ctx context.Context) error
 }

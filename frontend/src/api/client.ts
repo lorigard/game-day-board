@@ -19,6 +19,15 @@ export class ApiError extends Error {
  * becomes an ApiError with a message fit to show on the page, so components
  * need only one way of handling failures (FR-12).
  */
+//
+// TypeScript note: <T> is a type parameter, like a C# generic. The caller says
+// what the data is, for example fetchApi<Team[]>('/api/teams'), and gets a
+// typed result back. The type is a promise to the compiler, not a check: the
+// JSON is not inspected at run time, which is why the Go side and types.ts
+// must agree.
+//
+// "async" lets the function use "await", which pauses until a Promise (a
+// value that arrives later, like a C# Task) is ready, without blocking the page.
 export async function fetchApi<T>(path: string): Promise<Envelope<T>> {
   // An absolute URL works the same in the browser and in tests.
   const url = new URL(path, window.location.origin);
@@ -29,6 +38,9 @@ export async function fetchApi<T>(path: string): Promise<Envelope<T>> {
     throw new ApiError(0, 'Could not reach the server. Check your connection and try again.');
   }
 
+  // fetch only throws when the request could not be sent at all. A 404 or a
+  // 503 still "succeeds" as far as fetch is concerned, so we check ok (true
+  // for status 200 to 299) ourselves.
   if (!response.ok) {
     throw new ApiError(response.status, await errorMessage(response));
   }

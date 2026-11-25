@@ -39,6 +39,11 @@ type Envelope struct {
 }
 
 // GameView is a game as the front end sees it, with its status worked out.
+//
+// Go note: football.Game is "embedded" (listed with no field name). Its
+// fields are promoted, so a GameView has .ID, .Home, and so on directly, and
+// the JSON comes out flat: {"id": ..., "home": ..., "status": "final"}.
+// It is Go's way to build on a type without inheritance.
 type GameView struct {
 	football.Game
 	Status string `json:"status"`
@@ -59,6 +64,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/teams", s.teams)
 	mux.HandleFunc("GET /api/teams/{id}", s.team)
 	mux.HandleFunc("GET /api/teams/{id}/schedule", s.schedule)
+	// A pattern ending in "/" matches everything under it. The router always
+	// prefers the most specific pattern, so this catch-all only answers
+	// addresses none of the routes above matched: a clear JSON 404.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusNotFound, "not_found", "No such endpoint.")
 	})
@@ -86,6 +94,11 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 
 // currentWeek returns the week to show first, plus the whole calendar for the
 // previous and next week buttons (FR-7).
+//
+// Every handler has the same shape: func(w, r). r is the incoming request; w
+// is where the response is written. Each one starts by giving the database
+// call a deadline (storeTimeout), so a slow database answers with a clear 503
+// instead of leaving the visitor's page loading forever.
 func (s *Server) currentWeek(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), storeTimeout)
 	defer cancel()
@@ -99,12 +112,16 @@ func (s *Server) currentWeek(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusServiceUnavailable, "no_data", "The season calendar has not been loaded yet.")
 		return
 	}
+	// SortFunc takes a compare function that returns a negative number,
+	// zero, or a positive number, like C#'s IComparer. Earliest week first.
 	slices.SortFunc(weeks, func(a, b football.Week) int { return a.Start.Compare(b.Start) })
 	s.respond(w, r, map[string]any{"current": current, "weeks": weeks})
 }
 
 // games returns one week's games, optionally for one conference (FR-6, FR-13).
 func (s *Server) games(w http.ResponseWriter, r *http.Request) {
+	// Validate everything from the address before using it. Anything a
+	// visitor can type is untrusted input.
 	q := r.URL.Query()
 	season, err1 := strconv.Atoi(q.Get("season"))
 	week, err2 := strconv.Atoi(q.Get("week"))
@@ -125,6 +142,10 @@ func (s *Server) games(w http.ResponseWriter, r *http.Request) {
 		s.storeError(w, r, err)
 		return
 	}
+	// Filtering by conference happens here rather than in the database query,
+	// because a game matches if either team is in that conference, and a
+	// week has few enough games that this costs nothing. DeleteFunc removes
+	// every game for which the function returns true.
 	if conf := q.Get("conference"); conf != "" {
 		games = slices.DeleteFunc(games, func(g football.Game) bool {
 			return !strings.EqualFold(g.Home.Conference, conf) && !strings.EqualFold(g.Away.Conference, conf)
@@ -216,9 +237,10 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request, data any) {
 	if st, err := s.Store.IngestStatus(ctx); err == nil && !st.LastSuccessAt.IsZero() {
 		env.LastUpdated = &st.LastSuccessAt
 	}
-	// Browsers and the hosting CDN may reuse a response for a minute. The data
-	// changes at most every 30 minutes, so this costs nothing in freshness and
-	// saves database reads.
+	// Browsers may reuse a response for a minute instead of asking again.
+	// The data changes at most every 30 minutes, so this costs nothing in
+	// freshness and saves database reads. ("public" also allows a shared
+	// cache, such as a CDN, to keep a copy if one is ever added.)
 	w.Header().Set("Cache-Control", "public, max-age=60")
 	httpx.WriteJSON(w, http.StatusOK, env)
 }

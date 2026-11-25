@@ -3,12 +3,19 @@ import type { Game, Team, TeamRecord, Week } from '../api/types';
 /**
  * Formats a kickoff time in the visitor's own time zone (FR-6), for example
  * "Sat, Nov 28, 11:00 AM MST". When the start time is not yet decided, the
- * date is only a placeholder, so only the day is shown.
+ * time part of the data is only a placeholder, so only the day is shown,
+ * followed by "Time TBA" (the usual sports abbreviation for "to be
+ * announced", short enough to fit in a game card's strip).
+ *
+ * timeZone is only passed in tests. In the browser it is left out, and
+ * Intl uses the visitor's own time zone.
  */
 export function formatKickoff(iso: string, timeTbd: boolean, timeZone?: string): string {
   const date = new Date(iso);
+  // Intl.DateTimeFormat is the browser's built-in date formatter; it handles
+  // time zones and daylight saving time so we do not have to.
   const day = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone }).format(date);
-  if (timeTbd) return `${day}, time to be announced`;
+  if (timeTbd) return `${day} · Time TBA`;
   const time = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short', timeZone }).format(date);
   // Newer browsers put a narrow no-break space before AM and PM. Replacing
   // every kind of space with a plain one makes the text the same everywhere.

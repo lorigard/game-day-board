@@ -39,6 +39,11 @@ func NewLogger(w io.Writer) *slog.Logger {
 }
 
 // statusRecorder remembers the status code a handler wrote, for the request log.
+//
+// It embeds http.ResponseWriter, so it has every method of the real writer
+// and passes them straight through, except WriteHeader, which it replaces
+// below to note the code first. This "wrap and override one method" trick is
+// how most Go middleware watches what a handler does.
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -52,6 +57,9 @@ func (r *statusRecorder) WriteHeader(code int) {
 // traceKey is the field Cloud Logging uses to group every log line of one request.
 const traceKey = "logging.googleapis.com/trace"
 
+// loggerKey is the key under which Middleware stores the request's logger in
+// its context. Using a private type, rather than a string like "logger",
+// means no other package can ever collide with it by accident.
 type loggerKey struct{}
 
 // Logger returns the request-scoped logger stored by Middleware, or the default logger.
@@ -80,6 +88,14 @@ func Middleware(logger *slog.Logger, projectID string, next http.Handler) http.H
 		r = r.WithContext(context.WithValue(r.Context(), loggerKey{}, reqLogger))
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 
+		// This deferred function runs after the handler finishes, normally or
+		// not. A "panic" is Go's crash for bugs (for example, using a nil
+		// pointer); recover() catches it so one bad request cannot take the
+		// whole server down. Ordinary failures use error values, not panics.
+		//
+		// Known limit: if the handler had already started writing its
+		// response before panicking, the 500 below cannot replace what was
+		// sent. The log line still records the panic.
 		defer func() {
 			if p := recover(); p != nil {
 				reqLogger.ErrorContext(r.Context(), "panic while handling request", "panic", fmt.Sprint(p), "path", r.URL.Path)
@@ -134,8 +150,14 @@ func Serve(ctx context.Context, srv *http.Server, logger *slog.Logger, drainTime
 }
 
 // serveUntil is Serve without the signal handling, so a test can trigger the
-// shutdown by cancelling ctx.
+// shutdown by canceling ctx.
 func serveUntil(ctx context.Context, srv *http.Server, logger *slog.Logger, drainTimeout time.Duration) error {
+	// Go note: "go func() { ... }()" starts the function on a new goroutine,
+	// so ListenAndServe (which blocks until the server stops) runs in the
+	// background. errCh is a channel, a typed pipe between goroutines: the
+	// background goroutine sends the server's final error into it, and the
+	// code below receives it. The 1 is a buffer, so the send never blocks
+	// even if nobody is listening yet.
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("server listening", "addr", srv.Addr)
@@ -154,6 +176,8 @@ func serveUntil(ctx context.Context, srv *http.Server, logger *slog.Logger, drai
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("graceful shutdown: %w", err)
 	}
+	// After Shutdown, ListenAndServe returns http.ErrServerClosed, which
+	// means "stopped as asked". Anything else is a real error.
 	if err := <-errCh; !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
@@ -165,12 +189,14 @@ func serveUntil(ctx context.Context, srv *http.Server, logger *slog.Logger, drai
 // client cannot hold a connection open forever.
 func NewServer(port string, h http.Handler) *http.Server {
 	return &http.Server{
-		Addr:              ":" + port,
-		Handler:           h,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      2 * time.Minute, // long enough for an ingest run
-		IdleTimeout:       60 * time.Second,
+		Addr:    ":" + port,
+		Handler: h,
+		// Go's default for all of these is "no limit", which lets a slow or
+		// malicious client tie up a connection forever (a "slowloris" attack).
+		ReadHeaderTimeout: 5 * time.Second,  // time to send the request headers
+		ReadTimeout:       10 * time.Second, // time to send the whole request
+		WriteTimeout:      2 * time.Minute,  // time to send the response; long enough for an ingest run
+		IdleTimeout:       60 * time.Second, // how long an unused keep-alive connection stays open
 	}
 }
 

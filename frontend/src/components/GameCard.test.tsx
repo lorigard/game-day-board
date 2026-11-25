@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { makeGame } from '../test/server';
@@ -22,7 +22,7 @@ describe('GameCard', () => {
     expect(within(card).getByText('Sat, Dec 5, 5:00 PM UTC')).toBeInTheDocument();
   });
 
-  it('shows the final score and marks the winner', () => {
+  it('shows the final score, marks the winner and loser, and still shows the date', () => {
     const card = renderCard(
       makeGame({
         id: 1,
@@ -34,21 +34,41 @@ describe('GameCard', () => {
     );
     expect(within(card).getByText('Final')).toBeInTheDocument();
     expect(within(card).getByText('28')).toBeInTheDocument();
-    expect(within(card).getByText('Kansas').closest('.team-line')).toHaveClass('winner');
-    expect(within(card).getByText('Kansas State').closest('.team-line')).not.toHaveClass('winner');
+    expect(within(card).getByText('Kansas').closest('.team-line')).toHaveClass('won');
+    expect(within(card).getByText('Kansas State').closest('.team-line')).toHaveClass('lost');
+    // A finished game keeps its date and time, so you can tell when it was played.
+    expect(card).toHaveTextContent('Sat, Dec 5, 5:00 PM UTC');
   });
 
-  it('marks the home team with "at", or "vs." at a neutral site', () => {
-    expect(within(renderCard()).getByText('Kansas').closest('.team-line')).toHaveTextContent(/^at Kansas/);
-    cleanup();
-    expect(within(renderCard(makeGame({ id: 1, neutralSite: true }))).getByText('Kansas').closest('.team-line')).toHaveTextContent(
-      /^vs\. Kansas/,
-    );
+  it('says who is home and where: "at Kansas · Memorial Stadium"', () => {
+    expect(renderCard()).toHaveTextContent('at Kansas · Memorial Stadium');
   });
 
-  it('does not call a started game live, because the free data has no live scores', () => {
+  it('says "Neutral site" instead of a home team at a neutral site', () => {
+    const card = renderCard(makeGame({ id: 1, neutralSite: true, venue: 'AT&T Stadium' }));
+    expect(card).toHaveTextContent('Neutral site · AT&T Stadium');
+    expect(card).not.toHaveTextContent('at Kansas');
+  });
+
+  it('leaves the stadium off when the data has none', () => {
+    const card = renderCard(makeGame({ id: 1, venue: '' }));
+    expect(within(card).getByText('at Kansas')).toBeInTheDocument();
+  });
+
+  it('labels a game that has not started "Upcoming", with no scores', () => {
+    const card = renderCard();
+    expect(within(card).getByText('Upcoming')).toBeInTheDocument();
+    expect(within(card).queryByText('–')).not.toBeInTheDocument();
+  });
+
+  it('calls a started game "Kicked off", never live, with a dash for each score', () => {
+    // The free data has no live scores, so all we honestly know is that it started.
     const card = renderCard(makeGame({ id: 1, status: 'started' }));
-    expect(within(card).getByText('In progress or awaiting final score')).toBeInTheDocument();
+    expect(within(card).getByText('Kicked off')).toBeInTheDocument();
+    expect(within(card).getAllByText('–')).toHaveLength(2);
+    // Screen readers hear words instead of "dash".
+    expect(within(card).getAllByText('score not available yet')).toHaveLength(2);
+    expect(card).toHaveTextContent('Sat, Dec 5, 5:00 PM UTC');
   });
 
   it('links only tracked teams to a team page', () => {

@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router';
+import { ExternalLink } from './ExternalLink';
 
 export const REPO_URL = 'https://github.com/lorigard/game-day-board';
 
@@ -27,11 +28,13 @@ export function Layout() {
       </main>
       <footer className="site-footer">
         <div className="container">
+          {/* The data source's terms ask for this credit on every page. */}
           <p>
-            Data provided by <a href="https://collegefootballdata.com">CollegeFootballData.com</a>.
+            Data provided by <ExternalLink href="https://collegefootballdata.com">CollegeFootballData.com</ExternalLink>.
           </p>
           <p>
-            A learning project by <a href="https://lori-gardner.com">Lori Gardner</a> · <a href={REPO_URL}>Source code</a>
+            A learning project by <ExternalLink href="https://lori-gardner.com">Lori Gardner</ExternalLink> ·{' '}
+            <ExternalLink href={REPO_URL}>Source code</ExternalLink>
           </p>
         </div>
       </footer>

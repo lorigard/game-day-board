@@ -1,3 +1,4 @@
+import { ExternalLink } from '../components/ExternalLink';
 import { REPO_URL } from '../components/Layout';
 
 /**
@@ -22,11 +23,14 @@ export function AboutPage() {
       <ul>
         <li>
           A small Go service runs on a schedule. It fetches games from{' '}
-          <a href="https://collegefootballdata.com">CollegeFootballData.com</a>, with timeouts and retries, and saves a
+          <ExternalLink href="https://collegefootballdata.com">CollegeFootballData.com</ExternalLink>, with timeouts and retries, and saves a
           copy in a Firestore database.
         </li>
         <li>A second Go service reads that copy and answers this site’s requests, so visitors never wait on the outside data source.</li>
-        <li>This page is a React app. Google Cloud Run runs the two Go services, and Firebase Hosting serves the site.</li>
+        <li>
+          This page is a React app. Google Cloud Run runs the two Go services, and the second one also serves the pages of
+          this site.
+        </li>
         <li>Every change runs the tests in GitHub Actions, and only a change that passes them is deployed.</li>
       </ul>
 
@@ -34,15 +38,18 @@ export function AboutPage() {
       <ul>
         <li>
           Scores are not live. The free data plan has no live scoreboard, and the data is refreshed every few hours, more
-          often on Saturdays. A game that has kicked off shows “In progress or awaiting final score” until its result
-          arrives.
+          often on Saturdays. A game that has kicked off is labeled “Kicked off”, with a dash in place of each score,
+          until its result arrives.
         </li>
         <li>It covers only the Big 12 and the SEC.</li>
         <li>It has no accounts, favorites, or notifications, and nothing related to betting.</li>
       </ul>
 
       <p>
-        The code, the architecture diagram, and a step-by-step build guide are on <a href={REPO_URL}>GitHub</a>.
+        The code is on <ExternalLink href={REPO_URL}>GitHub</ExternalLink>, along with the{' '}
+        <ExternalLink href={`${REPO_URL}/blob/main/docs/SRS.md`}>requirements and design decisions</ExternalLink> written
+        before building, the <ExternalLink href={`${REPO_URL}/blob/main/docs/ARCHITECTURE.md`}>architecture diagram</ExternalLink>,
+        and a step-by-step build guide.
       </p>
     </article>
   );

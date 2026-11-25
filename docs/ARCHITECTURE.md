@@ -61,9 +61,28 @@ Schedule: every 6 hours (about 120 runs a month) plus every 30 minutes from noon
 | Verified deploys | CI/CD | A new version gets no traffic until its health check passes |
 | Scaling caps and a budget alert | Cloud Run, Billing | At most 2 instances of the site and 1 of ingest; email at 50, 90, and 100 percent of $5 a month |
 
-## Change from the original design
+## Decision: one service for the pages and the API
 
-The SRS (decision D6) planned Firebase Hosting for the React files, with `/api` routed to Cloud Run. Adding Firebase to a Google Cloud project needs a one-time step in the Firebase console, so the first version instead serves the React files from the same Cloud Run service as the API, the alternative D6 listed. It is one fewer product to run. Moving to Firebase Hosting later changes only the deploy step, not the code.
+**What we do.** One Cloud Run service, `gdb-web`, serves both the React files and the API. The Go code in `backend/internal/web` sends `/api/...` requests to the API and every other request to the built React files.
+
+**What the [SRS](SRS.md) first planned (decision D6).** Firebase Hosting for the React files, with `/api` passed through to Cloud Run. This "static files from a CDN, API from a container" split is a very common architecture. We changed course because adding Firebase to a Google Cloud project needs a one-time step in the Firebase console, and then weighed whether the split was worth it at this size. It was not, yet.
+
+**The tradeoff.**
+
+| | One Cloud Run service (what we do) | Firebase Hosting plus Cloud Run (the split) |
+| --- | --- | --- |
+| Where page files come from | One region (us-central1, Iowa) | A CDN: copies on servers around the world, near each visitor |
+| First visit after a quiet spell | About a second while Cloud Run starts an instance | Page frame appears at once, but the scores still wait for Cloud Run, so the total wait barely changes |
+| If Cloud Run is down | Nothing loads | The page frame loads, with no games to show |
+| Products to set up, secure, and explain | One | Two |
+| Deploys per change | One container | Two (files and container), which the pipeline must keep in step |
+| Preview addresses for a change | No; the pipeline's candidate revision covers safe releases | Yes, a temporary address per change |
+| Custom domain | Possible through Cloud Run domain mapping, with a few more steps | Simple |
+| Money | Free at this traffic | Free at this traffic |
+
+**Why one service wins for now.** Visitors are few and mostly in the United States, so a CDN saves little time, and the data still comes from Cloud Run either way. One service is simpler to run, deploy, and explain.
+
+**When we would switch.** Many visitors far from Iowa, a need for the page to load even when the API is down, or a custom domain. Switching changes only the deploy step (build the React files, deploy them to Firebase, add a `/api` rewrite) and the container stops copying the files in. The Go and React code stay the same.
 
 ## Services and identities
 

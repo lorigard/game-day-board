@@ -6,6 +6,9 @@ import { formatKickoff, formatRecord, weekLabel } from '../lib/format';
 
 /** One team's page: its season schedule, results, and record (FR-8). */
 export function TeamPage() {
+  // useParams reads the parts of the address that App.tsx named in the route.
+  // The route is "/teams/:id", so for /teams/2305 this gives id = "2305".
+  // The back end checks that it is a number; a bad one comes back as a 400.
   const { id } = useParams();
   const team = useApi<Team>(`/api/teams/${id}`);
   const schedule = useApi<Schedule>(`/api/teams/${id}/schedule`);
@@ -47,6 +50,11 @@ export function TeamPage() {
   );
 }
 
+/**
+ * The season schedule as a table. A real <table> (not a grid of divs) is the
+ * right choice for rows and columns of data: screen readers can announce the
+ * column heading for each cell, which scope="col" below tells them.
+ */
 function ScheduleTable({ teamId, games }: { teamId: number; games: Game[] }) {
   if (games.length === 0) return <p>No games found for this season yet.</p>;
   return (
@@ -66,6 +74,8 @@ function ScheduleTable({ teamId, games }: { teamId: number; games: Game[] }) {
           return (
             <tr key={g.id}>
               <td>{weekLabel(g)}</td>
+              {/* Schedule convention: "vs. X" for a home game (or a neutral
+                  site), "at X" when this team travels to X. */}
               <td>
                 {isHome || g.neutralSite ? 'vs.' : 'at'} {opponent.name}
               </td>
@@ -83,9 +93,11 @@ function result(g: Game, isHome: boolean): string {
   const us = isHome ? g.home.points : g.away.points;
   const them = isHome ? g.away.points : g.home.points;
   if (g.status === 'final' && us !== null && them !== null) {
+    // Two "?:" in a row read as: if us > them then W, else if us < them then L, else T.
     const letter = us > them ? 'W' : us < them ? 'L' : 'T';
     return `${letter} ${us}-${them}`;
   }
-  if (g.status === 'started') return 'In progress or awaiting final score';
+  // Same honest wording as the game cards: we know it started, not the score.
+  if (g.status === 'started') return 'Kicked off, awaiting final score';
   return formatKickoff(g.startTime, g.startTimeTbd);
 }
