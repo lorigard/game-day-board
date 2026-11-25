@@ -82,10 +82,12 @@ function TeamLine({ side, isTracked, result, started }: TeamLineProps) {
         ) : (
           // Opponents from other conferences have no team page here. Without
           // an explanation, a name that is not a link looks like a bug, so
-          // hovering shows why. The "title" attribute is the browser's own
-          // tooltip. Hover does not exist on phones, which is why the home
-          // page also says which names are links (see HomePage.tsx).
-          <span className="team-no-page" title={NO_PAGE_HINT}>
+          // hovering shows why, straight away. styles.css draws the message
+          // from data-hint (the browser's own "title" tooltip waits about a
+          // second, which people missed). Hover does not exist on phones,
+          // which is why the home page also says which names are links (see
+          // HomePage.tsx); that note covers screen readers too.
+          <span className="team-no-page" data-hint={NO_PAGE_HINT}>
             {side.name}
           </span>
         )}

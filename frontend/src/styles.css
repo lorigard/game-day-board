@@ -182,8 +182,6 @@ select {
   background: var(--surface);
   border: 2px solid var(--card-frame);
   border-radius: 10px;
-  /* overflow: hidden clips the strip's square corners to the card's rounded ones. */
-  overflow: hidden;
   /* A soft shadow lifts the card off the page background. */
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
   /* "transition" animates the hover change below instead of snapping. */
@@ -192,6 +190,10 @@ select {
 .game-card:hover {
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
   transform: translateY(-1px);
+  /* Lift the hovered card above its neighbors, so a hover message that
+     reaches past the card's edge is drawn on top of the next card. */
+  position: relative;
+  z-index: 5;
 }
 /* Some people set their computer to reduce motion (it can cause dizziness).
    This media query respects that setting by turning the lift off. */
@@ -203,6 +205,10 @@ select {
 /* The navy strip. "baseline" lines up the small status word and the date on
    the bottom of their letters, even though they are different sizes. */
 .game-strip {
+  /* Round the strip's top corners to match the card (the card's 10px radius
+     minus its 2px border). The card does not clip its contents, so that a
+     hover message can reach past its edge, so the strip rounds itself. */
+  border-radius: 8px 8px 0 0;
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -248,7 +254,38 @@ select {
    rely on color). Names with no page get a hover message (see GameCard.tsx). */
 .team-name,
 .team-name a { color: var(--accent); }
-.team-no-page { cursor: help; } /* the question-mark cursor says "hover for an explanation" */
+
+/* The hover message for a team with no page. The question-mark cursor says
+   "hover for an explanation". The message itself is drawn by CSS from the
+   element's data-hint attribute: "::after" adds a box after the name, and
+   attr(data-hint) fills it with that attribute's text. It is invisible
+   (opacity 0) until the name is hovered. position: absolute places it just
+   below the name without moving anything else on the card. */
+.team-no-page {
+  position: relative;
+  cursor: help;
+}
+.team-no-page::after {
+  content: attr(data-hint);
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 0.2rem;
+  width: max-content;
+  max-width: 14rem; /* wraps onto two lines instead of running off the card */
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  background: var(--card-strip);
+  color: var(--card-strip-text);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.3;
+  opacity: 0;
+  pointer-events: none; /* the hidden box must never block clicks */
+  z-index: 10;
+  transition: opacity 100ms ease;
+}
+.team-no-page:hover::after { opacity: 1; }
 .team-score {
   font-variant-numeric: tabular-nums; /* every digit the same width, so scores line up */
   font-size: 1.3rem;

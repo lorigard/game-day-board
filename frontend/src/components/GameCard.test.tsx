@@ -83,9 +83,9 @@ describe('GameCard', () => {
     const card = renderCard(
       makeGame({ id: 1, away: { teamId: 59, name: 'Georgia Tech', conference: 'ACC', points: null } }),
     );
-    // The browser shows the title attribute as a tooltip on hover.
+    // styles.css shows the data-hint text as a tooltip on hover.
     expect(within(card).getByText('Georgia Tech')).toHaveAttribute(
-      'title',
+      'data-hint',
       'No team page: this site covers Big 12 and SEC teams only.',
     );
   });
