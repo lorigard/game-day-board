@@ -6,7 +6,7 @@ Lori Gardner · Written 2026-11-16, before any code
 
 ## 1. Introduction
 
-Game Day Board is a small web app that shows this week's college football games and scores, and a page for each team. It is a learning and portfolio project, built with a Go back end, a React front end, and Google Cloud hosting.
+Game Day Board is a small web app that shows college football games and scores week by week, opening on the current week, and a page for each team. It is a learning and portfolio project, built with a Go back end, a React front end, and Google Cloud hosting.
 
 ### 1.1 Purpose
 

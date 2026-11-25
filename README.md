@@ -1,6 +1,6 @@
 # Game Day Board
 
-This week's college football games and scores for the Big 12 and the SEC, with a page for each team showing its schedule, results, and record.
+Big 12 and SEC college football games and scores, week by week, with a page for each team showing its schedule, results, and record.
 
 **Live site:** https://gdb-web-442687404328.us-central1.run.app
 

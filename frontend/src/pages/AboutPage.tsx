@@ -10,8 +10,9 @@ export function AboutPage() {
     <article className="prose">
       <h1>About Game Day Board</h1>
       <p>
-        Game Day Board shows this week’s college football games and scores for the Big 12 and the SEC, with a page for
-        each team showing its schedule, results, and record.
+        Game Day Board shows Big 12 and SEC college football games and scores, week by week, with a page for each team
+        showing its schedule, results, and record. It opens on the current week, and you can step back through the
+        season or ahead to games still to come.
       </p>
       <p>
         It is a learning project. I built it to practice a stack that is new to me: a Go back end, a React front end, and

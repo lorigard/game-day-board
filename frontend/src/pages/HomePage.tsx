@@ -115,7 +115,7 @@ function GameGroups(props: { games: Game[]; teams: Team[]; trackedIds: Set<numbe
   const groups = groupByConference(props.games, props.teams).filter(
     (g) => props.conference === '' || g.conference === props.conference,
   );
-  if (groups.length === 0) return <p>No games for these teams this week.</p>;
+  if (groups.length === 0) return <p>No Big 12 or SEC games in this week.</p>;
   return groups.map((group) => (
     <section key={group.conference} aria-label={group.conference} className="conference-group">
       <h2>{group.conference}</h2>

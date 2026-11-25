@@ -69,7 +69,7 @@ describe('HomePage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('The data is temporarily unavailable');
     await user.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('No games for these teams this week.')).toBeInTheDocument();
+    expect(await screen.findByText('No Big 12 or SEC games in this week.')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 

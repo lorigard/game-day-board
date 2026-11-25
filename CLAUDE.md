@@ -1,6 +1,6 @@
 # Game Day Board: instructions for AI coding agents
 
-Game Day Board shows this week's college football games and scores for the Big 12 and the SEC, with a page per team. Data comes from the CollegeFootballData.com (CFBD) API. It is a public portfolio and learning project.
+Game Day Board shows Big 12 and SEC college football games and scores, week by week, with a page per team. Data comes from the CollegeFootballData.com (CFBD) API. It is a public portfolio and learning project.
 
 ## Rules
 
